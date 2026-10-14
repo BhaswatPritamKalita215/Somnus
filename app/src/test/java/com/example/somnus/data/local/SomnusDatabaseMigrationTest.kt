@@ -414,4 +414,159 @@ class SomnusDatabaseMigrationTest {
         dbV3.close()
         dbFile.delete()
     }
+
+    @Test
+    fun migration4To5_preservesExistingDataAndAddsIndianFssaiFields() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbFile = File(context.cacheDir, "test_migration_4_5.db")
+        if (dbFile.exists()) dbFile.delete()
+
+        val configuration = androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name(dbFile.name)
+            .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(4) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    // Create Schema Version 4
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `food_products` (
+                            `id` TEXT NOT NULL PRIMARY KEY,
+                            `barcode` TEXT NOT NULL,
+                            `barcodeFormat` TEXT NOT NULL,
+                            `name` TEXT NOT NULL,
+                            `brand` TEXT,
+                            `variant` TEXT,
+                            `packageDescription` TEXT,
+                            `servingSize` REAL,
+                            `servingUnit` TEXT NOT NULL,
+                            `nutritionBasis` TEXT NOT NULL,
+                            `energyKcal` REAL NOT NULL,
+                            `proteinGrams` REAL,
+                            `carbohydratesGrams` REAL,
+                            `fatGrams` REAL,
+                            `fiberGrams` REAL,
+                            `sugarGrams` REAL,
+                            `sodiumMilligrams` REAL,
+                            `source` TEXT NOT NULL,
+                            `sourceProductId` TEXT,
+                            `lastVerifiedAt` INTEGER NOT NULL,
+                            `isUserModified` INTEGER NOT NULL,
+                            `completeness` TEXT NOT NULL,
+                            `notes` TEXT
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `food_log_entries` (
+                            `id` TEXT NOT NULL PRIMARY KEY,
+                            `productId` TEXT,
+                            `barcode` TEXT,
+                            `productName` TEXT NOT NULL,
+                            `brand` TEXT,
+                            `mealType` TEXT NOT NULL,
+                            `loggedAt` INTEGER NOT NULL,
+                            `localDate` TEXT NOT NULL,
+                            `quantity` REAL NOT NULL,
+                            `unit` TEXT NOT NULL,
+                            `numberOfServings` REAL,
+                            `calculatedCalories` REAL NOT NULL,
+                            `calculatedProtein` REAL,
+                            `calculatedCarbs` REAL,
+                            `calculatedFat` REAL,
+                            `calculatedFiber` REAL,
+                            `calculatedSugar` REAL,
+                            `calculatedSodiumMg` REAL,
+                            `source` TEXT NOT NULL,
+                            `externalRecordId` TEXT
+                        )
+                        """.trimIndent()
+                    )
+                }
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+            })
+            .build()
+
+        val helper = FrameworkSQLiteOpenHelperFactory().create(configuration)
+        val dbV4 = helper.writableDatabase
+
+        // Insert sample records in v4
+        dbV4.execSQL(
+            """
+            INSERT INTO food_products (
+                id, barcode, barcodeFormat, name, brand, servingUnit, nutritionBasis,
+                energyKcal, proteinGrams, carbohydratesGrams, fatGrams, source, lastVerifiedAt, isUserModified, completeness
+            ) VALUES (
+                'fp-v4', '8901030383748', 'EAN_13', 'Kissan Fresh Tomato Ketchup', 'Kissan', 'GRAMS', 'PER_100_G',
+                130.0, 1.2, 31.0, 0.0, 'LOCAL_USER', 1700000000000, 0, 'COMPLETE'
+            )
+            """.trimIndent()
+        )
+
+        dbV4.execSQL(
+            """
+            INSERT INTO food_log_entries (
+                id, productId, barcode, productName, mealType, loggedAt, localDate,
+                quantity, unit, calculatedCalories, calculatedProtein, calculatedCarbs, calculatedFat, source
+            ) VALUES (
+                'log-v4', 'fp-v4', '8901030383748', 'Kissan Fresh Tomato Ketchup', 'SNACK', 1700000000000, '2026-10-14',
+                15.0, 'GRAMS', 19.5, 0.18, 4.65, 0.0, 'LOCAL_USER'
+            )
+            """.trimIndent()
+        )
+
+        // Apply MIGRATION_4_5
+        SomnusDatabase.MIGRATION_4_5.migrate(dbV4)
+
+        // Verify existing v4 data preserved
+        val fpCursor = dbV4.query("SELECT id, name, energyKcal, brandAliasesJson FROM food_products WHERE id = 'fp-v4'")
+        assertTrue(fpCursor.moveToFirst())
+        assertEquals("fp-v4", fpCursor.getString(0))
+        assertEquals("Kissan Fresh Tomato Ketchup", fpCursor.getString(1))
+        assertEquals(130.0, fpCursor.getDouble(2), 0.01)
+        assertEquals("[]", fpCursor.getString(3)) // Default value for new column
+        fpCursor.close()
+
+        val logCursor = dbV4.query("SELECT id, calculatedCalories, calculatedSaltG FROM food_log_entries WHERE id = 'log-v4'")
+        assertTrue(logCursor.moveToFirst())
+        assertEquals("log-v4", logCursor.getString(0))
+        assertEquals(19.5, logCursor.getDouble(1), 0.01)
+        assertTrue(logCursor.isNull(2)) // Nullable new column defaults to null
+        logCursor.close()
+
+        // Insert new record with Indian FSSAI fields, Hindi name, and net quantity
+        dbV4.execSQL(
+            """
+            INSERT INTO food_products (
+                id, barcode, barcodeFormat, name, nameHi, brand, brandAliasesJson, category,
+                packageDescription, netQuantityValue, netQuantityUnit, servingSize, servingUnit,
+                nutritionBasis, energyKcal, proteinGrams, carbohydratesGrams, sugarGrams, addedSugarsGrams,
+                fatGrams, saturatedFatGrams, transFatGrams, sodiumMilligrams, saltGrams, fssaiLicenseNumber,
+                source, lastVerifiedAt, isUserModified, completeness
+            ) VALUES (
+                'fp-india-1', '8901719101053', 'EAN_13', 'Parle-G Original Gluco Biscuits', 'पारले-जी ग्लूकोज बिस्कुट',
+                'Parle', '["Parle-G", "Parle G"]', 'Biscuits & Cookies', '79.9g pack', 79.9, 'GRAMS',
+                26.6, 'GRAMS', 'PER_100_G', 454.0, 6.5, 78.2, 25.5, 24.0, 13.0, 6.0, 0.0, 280.0, 0.71,
+                '10012022000122', 'VERIFIED_CATALOGUE', 1700000000000, 0, 'COMPLETE'
+            )
+            """.trimIndent()
+        )
+
+        val indiaCursor = dbV4.query(
+            "SELECT barcode, nameHi, category, netQuantityValue, addedSugarsGrams, saltGrams, fssaiLicenseNumber " +
+                    "FROM food_products WHERE barcode = '8901719101053'"
+        )
+        assertTrue(indiaCursor.moveToFirst())
+        assertEquals("8901719101053", indiaCursor.getString(0))
+        assertEquals("पारले-जी ग्लूकोज बिस्कुट", indiaCursor.getString(1))
+        assertEquals("Biscuits & Cookies", indiaCursor.getString(2))
+        assertEquals(79.9, indiaCursor.getDouble(3), 0.01)
+        assertEquals(24.0, indiaCursor.getDouble(4), 0.01)
+        assertEquals(0.71, indiaCursor.getDouble(5), 0.001)
+        assertEquals("10012022000122", indiaCursor.getString(6))
+        indiaCursor.close()
+
+        dbV4.close()
+        dbFile.delete()
+    }
 }

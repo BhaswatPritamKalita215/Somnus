@@ -249,8 +249,27 @@ Milestone 4 introduces a dedicated, testable domain analytics engine and an inte
   - Reads active calories burned and total energy expenditure from Health Connect where available.
   - Strictly segregates dietary intake from physical energy expenditure.
 
+### India-First Food Scanner & FSSAI Compliance
+- **Indian Barcode Support**:
+  - Prioritizes EAN-13 (GTIN-13) and EAN-8 (for ₹5 and ₹10 small packs / sachets commonly sold in Indian kirana stores), alongside UPC-A/UPC-E for imported products and QR codes.
+  - Recognizes GS1 India country code prefix (`890`) while strictly guaranteeing that prefix is never used as proof of manufacturing or used to reject valid international barcodes (e.g. imported chocolates, beverages).
+  - Preserves leading zeros faithfully (`BarcodeValidator.normalizeBarcode`) with standard Modulo-10 check digit verification.
+- **Indian Packaged-Food Catalogue**:
+  - Accommodates core Indian categories: Biscuits & Cookies (Parle-G, Britannia), Namkeen & Savoury Snacks (Haldiram's, Bikaji), Instant Noodles & Ready Meals (Maggi, Yippee), Packaged Dairy (Amul, Mother Dairy), Chips & Savoury Foods (Kurkure, Lay's India), Chocolates & Sweets (Cadbury Dairy Milk India), and Regional Indian Snacks.
+  - Full dual-language support: English names and Devanagari Hindi (`nameHi`) names and aliases (e.g. `मैगी`, `पारले-जी`, `हल्दीराम`).
+  - Search DAO matches across English names, Hindi Devanagari names, brands, brand aliases, and categories.
+- **FSSAI Nutrition-Label Handling**:
+  - Fully implements Indian Food Safety and Standards Authority of India (FSSAI) mandatory fields: Energy (kcal), Protein, Carbohydrates, Total Sugars, **Added Sugars**, Total Fat, **Saturated Fat**, **Trans Fat**, and **Sodium vs Salt**.
+  - **Strict Chemical Distinction**: Sodium (Na) in mg and Salt (NaCl) in g are preserved as distinct non-interchangeable entities, preventing lossy conversions. Precise stoichiometric conversions ($\text{Salt (g)} \approx \text{Sodium (mg)} \times 0.00254$) are provided transparently.
+  - Support for FSSAI License numbers (`fssaiLicenseNumber`).
+- **Package & Portion Calculations**:
+  - Accurately computes whole-pack and fractional-pack consumption from net package weight/volume (e.g. 1 pack of 79.9g Parle-G on a 454 kcal/100g basis = 362.7 kcal).
+  - Never assumes net package weight equals 1 serving.
+- **Room Migration 4 $\to$ 5**:
+  - `MIGRATION_4_5` seamlessly adds Hindi name, brand aliases JSON, category, net quantity, FSSAI nutrient fields, and FSSAI license columns to `food_products` and `food_log_entries` without data loss.
+
 ### Settings & Data Sovereignty
-- **Diagnostics**: Real-time record counts for Sessions, SOL records, PSQI assessments, Steps, Food Products, and Log Entries, alongside Room database schema version 4.
+- **Diagnostics**: Real-time record counts for Sessions, SOL records, PSQI assessments, Steps, Food Products, and Log Entries, alongside Room database schema version 5.
 - **Appearance**: Seamless switching between Dark (Default), System, and Light themes via DataStore.
 - **Daily Targets**: Configurable daily step goal and daily calorie intake target.
 - **Permanent Data Deletion**: Two-step confirmation dialog allowing complete atomic wipe of all local records.
@@ -259,7 +278,7 @@ Milestone 4 introduces a dedicated, testable domain analytics engine and an inte
 
 ## 7. Verification & Test Suite
 
-The test suite contains **155+ automated tests** across domain logic, scoring engines, database DAOs, migrations, analytics calculators, step tracking reconciliation, Open Food Facts parsing, and ViewModels. All pass with 100% success rate:
+The test suite contains **181 automated tests** across domain logic, scoring engines, database DAOs, migrations, analytics calculators, step tracking reconciliation, Open Food Facts parsing, and ViewModels. All pass with 100% success rate:
 
 ```powershell
 .\gradlew.bat test
@@ -289,11 +308,13 @@ The test suite contains **155+ automated tests** across domain logic, scoring en
 21. `PhoneStepTrackerTest`: Hardware step sensor cumulative baseline, reboot detection, counter reset handling, non-negative delta guarantee, and midnight date rollover.
 22. `HealthConnectStepImportTest`: Health Connect step sync, permission denial handling, device model / package attribution, and deduplication by external record ID.
 23. `ActivityViewModelTest`: UI StateFlow emissions, goal progress, custom step goal editing, and Health Connect sync orchestration.
-24. `SomnusDatabaseMigrationTest`: Migration verification from v1 to v2, v2 to v3, and v3 to v4 (`food_products` and `food_log_entries` tables, indexes, and existing data preservation).
+24. `SomnusDatabaseMigrationTest`: Migration verification from v1 to v2, v2 to v3, v3 to v4, and v4 to v5 (adding Hindi name, brand aliases, category, net quantity, FSSAI fields, and data preservation).
 25. `NutritionCalculatorTest`: Portion scaling across per-100g, per-100ml, and per-serving bases; null vs 0.0 preservation; immutable log entry snapshots; and multi-meal daily summary aggregation.
-26. `OpenFoodFactsClientTest`: Pure JSON parsing of Open Food Facts v2 responses, serving size unit extraction, unlisted products, and partial nutrient models.
+26. `OpenFoodFactsClientTest`: Pure JSON parsing of Open Food Facts v2 responses, serving size unit extraction, unlisted products, and Indian FSSAI / Hindi field parsing.
 27. `FoodRepositoriesTest`: Local-first caching, offline fallback, deduplication, and daily log queries.
 28. `NutritionViewModelTest`: UI StateFlow emissions, barcode scanner state machine, portion adjustment, manual food entry, and calorie target updates.
+29. `BarcodeValidatorTest`: Leading-zero preservation (UPC-A, EAN-8), Modulo-10 GS1 check digit verification, GS1 India 890 prefix detection, and format inference without national discrimination.
+30. `IndianPackagedFoodTest`: Real Indian packaged food profiles across categories (Parle-G, Maggi Noodles, Haldiram's Aloo Bhujia, Amul Butter, Kurkure, Cadbury Dairy Milk, ₹5 EAN-8 sachet, imported Swiss Toblerone), package-level vs 100g math, and FSSAI salt vs sodium chemical separation.
 
 ---
 

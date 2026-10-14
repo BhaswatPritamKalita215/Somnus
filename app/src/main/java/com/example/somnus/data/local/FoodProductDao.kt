@@ -18,7 +18,15 @@ interface FoodProductDao {
     @Query("SELECT * FROM food_products WHERE id = :id LIMIT 1")
     suspend fun findByIdSync(id: String): FoodProductEntity?
 
-    @Query("SELECT * FROM food_products WHERE name LIKE '%' || :query || '%' OR brand LIKE '%' || :query || '%' ORDER BY name ASC LIMIT 30")
+    @Query("""
+        SELECT * FROM food_products 
+        WHERE name LIKE '%' || :query || '%' 
+           OR nameHi LIKE '%' || :query || '%' 
+           OR brand LIKE '%' || :query || '%' 
+           OR brandAliasesJson LIKE '%' || :query || '%' 
+           OR category LIKE '%' || :query || '%' 
+        ORDER BY name ASC LIMIT 30
+    """)
     fun searchByName(query: String): Flow<List<FoodProductEntity>>
 
     @Query("SELECT * FROM food_products ORDER BY lastVerifiedAt DESC LIMIT :limit")

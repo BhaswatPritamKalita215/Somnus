@@ -13,15 +13,20 @@ import java.util.UUID
 
 /**
  * Calculated nutritional snapshot for a consumed portion of food.
+ * Supports Indian FSSAI labeling mandates (Added sugars, Saturated Fat, Trans Fat, Salt vs Sodium).
  */
 data class NutritionSnapshot(
     val caloriesKcal: Double,
     val proteinGrams: Double?,
     val carbohydratesGrams: Double?,
     val fatGrams: Double?,
-    val fiberGrams: Double?,
+    val saturatedFatGrams: Double?,
+    val transFatGrams: Double?,
     val sugarGrams: Double?,
+    val addedSugarsGrams: Double?,
+    val fiberGrams: Double?,
     val sodiumMilligrams: Double?,
+    val saltGrams: Double?,
     val effectiveRatio: Double,
     val calculatedNumberOfServings: Double?
 )
@@ -30,10 +35,11 @@ data class NutritionSnapshot(
  * Pure domain calculator for quantity-based nutrition conversion and log entry generation.
  *
  * Guarantees:
- * 1. Unit awareness: Correctly scales per-100g, per-100ml, and per-serving label data.
+ * 1. Unit awareness: Correctly scales per-100g, per-100ml, per-serving, and package-based label data.
  * 2. Scientific honesty: Distinguishes measured 0.0 from unmeasured (null) nutrients.
  *    Never assumes an unlisted nutrient is zero.
- * 3. Exact precision: Preserves floating-point calculation without early truncation.
+ * 3. Salt vs Sodium Integrity: Treats Salt (NaCl) and Sodium (Na) as chemically distinct metrics.
+ *    Never confuses them or performs lossy implicit conversions.
  * 4. Immutable snapshotting: Generates self-contained [FoodLogEntry] records that remain
  *    invariant even if the catalog product is edited later.
  */
@@ -57,9 +63,13 @@ object NutritionCalculator {
             proteinGrams = product.proteinGrams?.let { roundToDecimals(it * ratio, 2) },
             carbohydratesGrams = product.carbohydratesGrams?.let { roundToDecimals(it * ratio, 2) },
             fatGrams = product.fatGrams?.let { roundToDecimals(it * ratio, 2) },
-            fiberGrams = product.fiberGrams?.let { roundToDecimals(it * ratio, 2) },
+            saturatedFatGrams = product.saturatedFatGrams?.let { roundToDecimals(it * ratio, 2) },
+            transFatGrams = product.transFatGrams?.let { roundToDecimals(it * ratio, 2) },
             sugarGrams = product.sugarGrams?.let { roundToDecimals(it * ratio, 2) },
+            addedSugarsGrams = product.addedSugarsGrams?.let { roundToDecimals(it * ratio, 2) },
+            fiberGrams = product.fiberGrams?.let { roundToDecimals(it * ratio, 2) },
             sodiumMilligrams = product.sodiumMilligrams?.let { roundToDecimals(it * ratio, 1) },
+            saltGrams = product.saltGrams?.let { roundToDecimals(it * ratio, 3) },
             effectiveRatio = ratio,
             calculatedNumberOfServings = servings
         )
@@ -95,15 +105,20 @@ object NutritionCalculator {
             calculatedProtein = portion.proteinGrams,
             calculatedCarbs = portion.carbohydratesGrams,
             calculatedFat = portion.fatGrams,
+            calculatedSaturatedFat = portion.saturatedFatGrams,
+            calculatedTransFat = portion.transFatGrams,
             calculatedFiber = portion.fiberGrams,
             calculatedSugar = portion.sugarGrams,
+            calculatedAddedSugars = portion.addedSugarsGrams,
             calculatedSodiumMg = portion.sodiumMilligrams,
+            calculatedSaltG = portion.saltGrams,
             source = product.source
         )
     }
 
     /**
      * Determines the multiplier ratio between the specified portion and the product's nutritional basis.
+     * Accurately supports package-level calculations using net package weight/volume where available.
      */
     fun computeRatio(
         product: FoodProduct,
@@ -114,25 +129,43 @@ object NutritionCalculator {
             NutritionBasis.PER_100_G -> {
                 when (unit) {
                     ServingUnit.GRAMS -> quantity / 100.0
-                    ServingUnit.SERVINGS, ServingUnit.PIECES, ServingUnit.PACKAGES -> {
+                    ServingUnit.MILLILITERS -> quantity / 100.0
+                    ServingUnit.SERVINGS, ServingUnit.PIECES -> {
                         val servingSize = product.servingSize ?: 100.0
                         (quantity * servingSize) / 100.0
                     }
-                    ServingUnit.MILLILITERS -> quantity / 100.0 // Approximation for liquid-density 1.0 if not specified
+                    ServingUnit.PACKAGES -> {
+                        // Use net package quantity if available; fall back to servingSize or 100g
+                        val netQuantity = product.netQuantityValue ?: product.servingSize ?: 100.0
+                        (quantity * netQuantity) / 100.0
+                    }
                 }
             }
             NutritionBasis.PER_100_ML -> {
                 when (unit) {
                     ServingUnit.MILLILITERS, ServingUnit.GRAMS -> quantity / 100.0
-                    ServingUnit.SERVINGS, ServingUnit.PIECES, ServingUnit.PACKAGES -> {
+                    ServingUnit.SERVINGS, ServingUnit.PIECES -> {
                         val servingSize = product.servingSize ?: 100.0
                         (quantity * servingSize) / 100.0
+                    }
+                    ServingUnit.PACKAGES -> {
+                        val netQuantity = product.netQuantityValue ?: product.servingSize ?: 100.0
+                        (quantity * netQuantity) / 100.0
                     }
                 }
             }
             NutritionBasis.PER_SERVING -> {
                 when (unit) {
-                    ServingUnit.SERVINGS, ServingUnit.PIECES, ServingUnit.PACKAGES -> quantity
+                    ServingUnit.SERVINGS, ServingUnit.PIECES -> quantity
+                    ServingUnit.PACKAGES -> {
+                        val netQuantity = product.netQuantityValue
+                        val servingSize = product.servingSize
+                        if (netQuantity != null && servingSize != null && servingSize > 0.0) {
+                            quantity * (netQuantity / servingSize)
+                        } else {
+                            quantity
+                        }
+                    }
                     ServingUnit.GRAMS, ServingUnit.MILLILITERS -> {
                         val servingSize = product.servingSize
                         if (servingSize != null && servingSize > 0.0) {
@@ -160,9 +193,34 @@ object NutritionCalculator {
 
         return when (unit) {
             ServingUnit.GRAMS, ServingUnit.MILLILITERS -> roundToDecimals(quantity / servingSize, 2)
-            ServingUnit.PIECES, ServingUnit.PACKAGES -> quantity
+            ServingUnit.PIECES -> quantity
             ServingUnit.SERVINGS -> quantity
+            ServingUnit.PACKAGES -> {
+                val netQuantity = product.netQuantityValue
+                if (netQuantity != null && netQuantity > 0.0) {
+                    roundToDecimals(quantity * (netQuantity / servingSize), 2)
+                } else {
+                    quantity
+                }
+            }
         }
+    }
+
+    /**
+     * Converts Sodium in milligrams to equivalent Salt in grams (NaCl).
+     * Formula: Salt (g) = Sodium (mg) * 0.00254 (approximately 2.5x).
+     * Note: Use only when explicit valid chemical conversion is requested.
+     */
+    fun sodiumMgToSaltGrams(sodiumMg: Double): Double {
+        return roundToDecimals(sodiumMg * 0.00254, 3)
+    }
+
+    /**
+     * Converts Salt in grams to equivalent Sodium in milligrams.
+     * Formula: Sodium (mg) = Salt (g) / 0.00254 (approximately Salt (g) * 393.4).
+     */
+    fun saltGramsToSodiumMg(saltGrams: Double): Double {
+        return roundToDecimals(saltGrams / 0.00254, 1)
     }
 
     /**

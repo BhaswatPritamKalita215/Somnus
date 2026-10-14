@@ -690,6 +690,15 @@ fun ProductFoundDialog(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (product.nameHi != null) {
+                    Text(
+                        text = product.nameHi,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 if (product.brand != null) {
                     Text(
                         text = product.brand,
@@ -705,16 +714,31 @@ fun ProductFoundDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Source and completeness badges
+                // Badges: GS1 India (890), Category, Source, Completeness
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    if (product.isGs1IndiaPrefix) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Text(
+                                text = "GS1 India (890)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
                     val sourceLabel = when (product.source) {
-                        ProductSource.OPEN_FOOD_FACTS -> "Open Food Facts (ODbL)"
+                        ProductSource.OPEN_FOOD_FACTS -> "Open Food Facts"
                         ProductSource.LOCAL_USER -> "Local Manual"
+                        ProductSource.USER_VERIFIED -> "User Verified"
                         ProductSource.HEALTH_CONNECT -> "Health Connect"
-                        ProductSource.VERIFIED_CATALOGUE -> "Verified Database"
+                        ProductSource.VERIFIED_CATALOGUE -> "Verified DB"
                     }
                     Surface(
                         shape = RoundedCornerShape(6.dp),
@@ -725,6 +749,20 @@ fun ProductFoundDialog(
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
+                    }
+
+                    if (product.category != null) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = product.category,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
 
                     Surface(
@@ -740,7 +778,16 @@ fun ProductFoundDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                if (product.netQuantityValue != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Net Package: ${formatQuantity(product.netQuantityValue)} ${product.netQuantityUnit.symbol}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Meal selection chips
                 Text(
@@ -762,7 +809,7 @@ fun ProductFoundDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Portion selection
                 Text(
@@ -790,19 +837,31 @@ fun ProductFoundDialog(
                         modifier = Modifier.weight(1f)
                     )
 
-                    // Unit selector chips
+                    // Unit selector chips - including PACKAGES if net package quantity is known
+                    val availableUnits = if (product.netQuantityValue != null) {
+                        listOf(ServingUnit.GRAMS, ServingUnit.MILLILITERS, ServingUnit.SERVINGS, ServingUnit.PACKAGES)
+                    } else {
+                        listOf(ServingUnit.GRAMS, ServingUnit.MILLILITERS, ServingUnit.SERVINGS)
+                    }
+
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(ServingUnit.GRAMS, ServingUnit.MILLILITERS, ServingUnit.SERVINGS).forEach { u ->
+                        availableUnits.forEach { u ->
                             FilterChip(
                                 selected = unit == u,
-                                onClick = { unit = u },
+                                onClick = {
+                                    unit = u
+                                    if (u == ServingUnit.PACKAGES && quantity > 10.0) {
+                                        quantity = 1.0
+                                        quantityText = "1"
+                                    }
+                                },
                                 label = { Text(u.symbol) }
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Live calculated nutritional values
                 Card(
@@ -824,10 +883,7 @@ fun ProductFoundDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                text = "Calories:",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            Text(text = "Calories:", style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 text = "${snapshot.caloriesKcal.toInt()} kcal",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -848,6 +904,58 @@ fun ProductFoundDialog(
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold
                             )
+                        }
+
+                        // FSSAI Nutrients
+                        if (snapshot.saturatedFatGrams != null || snapshot.transFatGrams != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Sat Fat / Trans Fat:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${formatGrams(snapshot.saturatedFatGrams)} / ${formatGrams(snapshot.transFatGrams)}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+
+                        if (snapshot.sugarGrams != null || snapshot.addedSugarsGrams != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Sugar / Added Sugars:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${formatGrams(snapshot.sugarGrams)} / ${formatGrams(snapshot.addedSugarsGrams)}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+
+                        if (snapshot.sodiumMilligrams != null || snapshot.saltGrams != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Sodium (mg) / Salt (g):",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${snapshot.sodiumMilligrams?.let { "${it.toInt()} mg" } ?: "—"} / ${snapshot.saltGrams?.let { "${it} g" } ?: "—"}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     }
                 }
@@ -870,6 +978,7 @@ fun ProductFoundDialog(
 
 /**
  * Dialog to manually enter a food item when not found via barcode scanner.
+ * Fully supports Indian FSSAI mandatory fields (Added Sugars, Saturated Fat, Trans Fat, Salt vs Sodium).
  */
 @Composable
 fun ManualFoodDialog(
@@ -877,17 +986,27 @@ fun ManualFoodDialog(
     initialMealType: MealType,
     onSaveAndLog: (
         name: String,
+        nameHi: String?,
         brand: String?,
+        brandAliases: List<String>,
+        category: String?,
         barcode: String?,
+        netQuantityValue: Double?,
+        netQuantityUnit: ServingUnit,
         servingSizeValue: Double?,
         servingSizeUnit: ServingUnit?,
         calories: Int?,
         protein: Double?,
         carbs: Double?,
         fat: Double?,
+        saturatedFat: Double?,
+        transFat: Double?,
         fiber: Double?,
         sugar: Double?,
+        addedSugars: Double?,
         sodium: Double?,
+        salt: Double?,
+        fssaiLicenseNumber: String?,
         basis: NutritionBasis,
         portionQuantity: Double,
         portionUnit: ServingUnit,
@@ -896,13 +1015,24 @@ fun ManualFoodDialog(
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
+    var nameHi by remember { mutableStateOf("") }
     var brand by remember { mutableStateOf("") }
     var barcode by remember { mutableStateOf(initialBarcode ?: "") }
+    var category by remember { mutableStateOf<String?>(null) }
+    var netQuantityText by remember { mutableStateOf("") }
+    var netQuantityUnit by remember { mutableStateOf(ServingUnit.GRAMS) }
     var caloriesText by remember { mutableStateOf("") }
     var proteinText by remember { mutableStateOf("") }
     var carbsText by remember { mutableStateOf("") }
     var fatText by remember { mutableStateOf("") }
+    var saturatedFatText by remember { mutableStateOf("") }
+    var transFatText by remember { mutableStateOf("") }
     var fiberText by remember { mutableStateOf("") }
+    var sugarText by remember { mutableStateOf("") }
+    var addedSugarsText by remember { mutableStateOf("") }
+    var sodiumText by remember { mutableStateOf("") }
+    var saltText by remember { mutableStateOf("") }
+    var fssaiLicenseText by remember { mutableStateOf("") }
     var basis by remember { mutableStateOf(NutritionBasis.PER_100_G) }
     var portionText by remember { mutableStateOf("100") }
     var portionUnit by remember { mutableStateOf(ServingUnit.GRAMS) }
@@ -910,7 +1040,7 @@ fun ManualFoodDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Manual Food Entry") },
+        title = { Text("Manual Food Entry (India / FSSAI)") },
         text = {
             Column(
                 modifier = Modifier
@@ -920,11 +1050,20 @@ fun ManualFoodDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Food Name *") },
+                    label = { Text("Food Name * (English)") },
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                OutlinedTextField(
+                    value = nameHi,
+                    onValueChange = { nameHi = it },
+                    label = { Text("Name in Hindi / हिन्दी (Optional)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
 
                 OutlinedTextField(
                     value = brand,
@@ -933,16 +1072,42 @@ fun ManualFoodDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 OutlinedTextField(
                     value = barcode,
                     onValueChange = { barcode = it },
-                    label = { Text("Barcode (Optional)") },
+                    label = { Text("Barcode / EAN (Optional)") },
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Net package quantity
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = netQuantityText,
+                        onValueChange = { netQuantityText = it },
+                        label = { Text("Net Pack Weight") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Row {
+                        listOf(ServingUnit.GRAMS, ServingUnit.MILLILITERS).forEach { u ->
+                            FilterChip(
+                                selected = netQuantityUnit == u,
+                                onClick = { netQuantityUnit = u },
+                                label = { Text(u.symbol) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
                     text = "Nutrition Label Basis",
@@ -975,7 +1140,7 @@ fun ManualFoodDialog(
                 OutlinedTextField(
                     value = caloriesText,
                     onValueChange = { caloriesText = it },
-                    label = { Text("Calories (kcal) *") },
+                    label = { Text("Energy / Calories (kcal) *") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1009,6 +1174,85 @@ fun ManualFoodDialog(
                     )
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // FSSAI Fats: Saturated & Trans Fat
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = saturatedFatText,
+                        onValueChange = { saturatedFatText = it },
+                        label = { Text("Sat Fat (g)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = transFatText,
+                        onValueChange = { transFatText = it },
+                        label = { Text("Trans Fat (g)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // FSSAI Sugars: Total & Added Sugars
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = sugarText,
+                        onValueChange = { sugarText = it },
+                        label = { Text("Total Sugar (g)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = addedSugarsText,
+                        onValueChange = { addedSugarsText = it },
+                        label = { Text("Added Sugars (g)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // FSSAI Sodium vs Salt (Strictly distinct)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = sodiumText,
+                        onValueChange = { sodiumText = it },
+                        label = { Text("Sodium (mg)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = saltText,
+                        onValueChange = { saltText = it },
+                        label = { Text("Salt (g)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = fssaiLicenseText,
+                    onValueChange = { fssaiLicenseText = it },
+                    label = { Text("FSSAI Lic. No. (Optional)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
@@ -1029,7 +1273,12 @@ fun ManualFoodDialog(
                         modifier = Modifier.weight(1f)
                     )
                     Row {
-                        listOf(ServingUnit.GRAMS, ServingUnit.MILLILITERS, ServingUnit.SERVINGS).forEach { u ->
+                        val portionUnits = if (netQuantityText.toDoubleOrNull() != null) {
+                            listOf(ServingUnit.GRAMS, ServingUnit.MILLILITERS, ServingUnit.SERVINGS, ServingUnit.PACKAGES)
+                        } else {
+                            listOf(ServingUnit.GRAMS, ServingUnit.MILLILITERS, ServingUnit.SERVINGS)
+                        }
+                        portionUnits.forEach { u ->
                             FilterChip(
                                 selected = portionUnit == u,
                                 onClick = { portionUnit = u },
@@ -1044,19 +1293,30 @@ fun ManualFoodDialog(
             Button(
                 onClick = {
                     val portion = portionText.toDoubleOrNull() ?: 100.0
+                    val netQty = netQuantityText.toDoubleOrNull()
                     onSaveAndLog(
                         name,
+                        nameHi.takeIf { it.isNotBlank() },
                         brand.takeIf { it.isNotBlank() },
+                        emptyList(),
+                        category,
                         barcode.takeIf { it.isNotBlank() },
-                        if (basis == NutritionBasis.PER_SERVING) 1.0 else 100.0,
+                        netQty,
+                        netQuantityUnit,
+                        if (basis == NutritionBasis.PER_SERVING) 1.0 else (netQty ?: 100.0),
                         portionUnit,
                         caloriesText.toIntOrNull(),
                         proteinText.toDoubleOrNull(),
                         carbsText.toDoubleOrNull(),
                         fatText.toDoubleOrNull(),
+                        saturatedFatText.toDoubleOrNull(),
+                        transFatText.toDoubleOrNull(),
                         fiberText.toDoubleOrNull(),
-                        null,
-                        null,
+                        sugarText.toDoubleOrNull(),
+                        addedSugarsText.toDoubleOrNull(),
+                        sodiumText.toDoubleOrNull(),
+                        saltText.toDoubleOrNull(),
+                        fssaiLicenseText.takeIf { it.isNotBlank() },
                         basis,
                         portion,
                         portionUnit,

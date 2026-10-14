@@ -6,6 +6,7 @@ import com.example.somnus.domain.model.ServingUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -117,5 +118,61 @@ class OpenFoodFactsClientTest {
         assertNotNull(product)
         assertEquals(240.0, product!!.servingSize!!, 0.1)
         assertEquals(ServingUnit.MILLILITERS, product.servingUnit)
+    }
+
+    @Test
+    fun parseOpenFoodFactsJson_indianProduct_extractsFssaiFieldsAndHindiName() {
+        val indianJson = """
+            {
+                "status": 1,
+                "code": "8901719101053",
+                "product": {
+                    "product_name": "Parle-G Original Gluco Biscuits",
+                    "product_name_hi": "पारले-जी",
+                    "brands": "Parle",
+                    "brands_tags": ["parle", "parle-g"],
+                    "categories_tags": ["en:biscuits-and-cookies", "en:snacks"],
+                    "quantity": "79.9 g",
+                    "serving_size": "26.6 g",
+                    "nutriments": {
+                        "energy-kcal_100g": 454.0,
+                        "proteins_100g": 6.5,
+                        "carbohydrates_100g": 78.2,
+                        "sugars_100g": 25.5,
+                        "added-sugars_100g": 24.0,
+                        "fat_100g": 13.0,
+                        "saturated-fat_100g": 6.0,
+                        "trans-fat_100g": 0.0,
+                        "sodium_100g": 0.28,
+                        "salt_100g": 0.71
+                    }
+                }
+            }
+        """.trimIndent()
+
+        val product = client.parseOpenFoodFactsJson("8901719101053", indianJson)
+
+        assertNotNull(product)
+        assertEquals("8901719101053", product!!.barcode)
+        assertTrue(product.isGs1IndiaPrefix)
+        assertEquals("Parle-G Original Gluco Biscuits", product.name)
+        assertEquals("पारले-जी", product.nameHi)
+        assertEquals("Parle", product.brand)
+        assertTrue(product.brandAliases.contains("parle-g"))
+        assertEquals("biscuits and cookies", product.category)
+        assertEquals(79.9, product.netQuantityValue!!, 0.01)
+        assertEquals(ServingUnit.GRAMS, product.netQuantityUnit)
+        assertEquals(26.6, product.servingSize!!, 0.01)
+        assertEquals(454.0, product.energyKcal, 0.1)
+        assertEquals(6.5, product.proteinGrams!!, 0.01)
+        assertEquals(78.2, product.carbohydratesGrams!!, 0.01)
+        assertEquals(25.5, product.sugarGrams!!, 0.01)
+        assertEquals(24.0, product.addedSugarsGrams!!, 0.01)
+        assertEquals(13.0, product.fatGrams!!, 0.01)
+        assertEquals(6.0, product.saturatedFatGrams!!, 0.01)
+        assertEquals(0.0, product.transFatGrams!!, 0.01)
+        assertEquals(280.0, product.sodiumMilligrams!!, 0.1) // 0.28g * 1000 = 280mg
+        assertEquals(0.71, product.saltGrams!!, 0.01)
+        assertEquals(DataCompleteness.COMPLETE, product.completeness)
     }
 }

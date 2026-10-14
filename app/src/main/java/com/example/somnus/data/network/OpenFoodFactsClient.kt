@@ -97,9 +97,74 @@ class OpenFoodFactsClient(
             }
         }
 
+        val nameHi = productObj.optString("product_name_hi").takeIf { it.isNotBlank() }
+
         val brands = productObj.optString("brands").takeIf { it.isNotBlank() }
+        val brandAliases = mutableListOf<String>()
+        val brandsTags = productObj.optJSONArray("brands_tags")
+        if (brandsTags != null) {
+            for (i in 0 until brandsTags.length()) {
+                val tag = brandsTags.optString(i).trim()
+                if (tag.isNotBlank() && !brandAliases.contains(tag)) {
+                    brandAliases.add(tag)
+                }
+            }
+        }
+        if (brands != null && brandAliases.isEmpty()) {
+            brandAliases.addAll(brands.split(",").map { it.trim() }.filter { it.isNotBlank() })
+        }
+
+        val categoriesTags = productObj.optJSONArray("categories_tags")
+        val primaryCategory = if (categoriesTags != null && categoriesTags.length() > 0) {
+            categoriesTags.optString(0).removePrefix("en:").replace("-", " ").trim()
+        } else {
+            productObj.optString("categories").split(",").firstOrNull()?.trim()?.takeIf { it.isNotBlank() }
+        }
+
         val genericName = productObj.optString("generic_name").takeIf { it.isNotBlank() }
         val packageDesc = productObj.optString("quantity").takeIf { it.isNotBlank() }
+
+        // Net quantity parsing for package-level math
+        var netQuantityValue: Double? = null
+        var netQuantityUnit = ServingUnit.GRAMS
+
+        if (packageDesc != null) {
+            val match = Regex("""([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z]+)""").find(packageDesc)
+            if (match != null) {
+                val num = match.groupValues[1].toDoubleOrNull()
+                val unitStr = match.groupValues[2].lowercase()
+                when {
+                    unitStr.contains("ml") -> {
+                        netQuantityValue = num
+                        netQuantityUnit = ServingUnit.MILLILITERS
+                    }
+                    unitStr == "l" || unitStr == "liter" || unitStr == "litre" -> {
+                        netQuantityValue = num?.times(1000.0)
+                        netQuantityUnit = ServingUnit.MILLILITERS
+                    }
+                    unitStr == "kg" -> {
+                        netQuantityValue = num?.times(1000.0)
+                        netQuantityUnit = ServingUnit.GRAMS
+                    }
+                    else -> {
+                        netQuantityValue = num
+                        netQuantityUnit = ServingUnit.GRAMS
+                    }
+                }
+            }
+        }
+        if (netQuantityValue == null) {
+            val productQuantityNum = productObj.optDouble("product_quantity", Double.NaN)
+            if (!productQuantityNum.isNaN() && productQuantityNum > 0) {
+                netQuantityValue = productQuantityNum
+                val productQuantityUnitStr = productObj.optString("product_quantity_unit").lowercase()
+                netQuantityUnit = if (productQuantityUnitStr.contains("ml") || productQuantityUnitStr.contains("l")) {
+                    ServingUnit.MILLILITERS
+                } else {
+                    ServingUnit.GRAMS
+                }
+            }
+        }
 
         // Serving size parsing
         var servingSize: Double? = null
@@ -112,7 +177,6 @@ class OpenFoodFactsClient(
 
         val servingSizeText = productObj.optString("serving_size")
         if (servingSize == null && servingSizeText.isNotBlank()) {
-            // Attempt to extract numeric portion: e.g., "30 g" -> 30.0
             val match = Regex("""([0-9]+(?:\.[0-9]+)?)""").find(servingSizeText)
             servingSize = match?.groupValues?.get(1)?.toDoubleOrNull()
         }
@@ -133,7 +197,6 @@ class OpenFoodFactsClient(
         }
 
         if (kcal.isNaN()) {
-            // Fallback to energy in kJ / 4.184
             val energyKj = nutriments.optDouble("energy_100g", Double.NaN)
             if (!energyKj.isNaN()) {
                 kcal = energyKj / 4.184
@@ -141,22 +204,25 @@ class OpenFoodFactsClient(
         }
 
         if (kcal.isNaN()) {
-            // If only per-serving is available
             val servingKcal = nutriments.optDouble("energy-kcal_serving", Double.NaN)
             if (!servingKcal.isNaN()) {
                 kcal = servingKcal
                 basis = NutritionBasis.PER_SERVING
             } else {
-                kcal = 0.0 // Default baseline if unspecified
+                kcal = 0.0
             }
         }
 
         val proteins = getNutrientOrNull(nutriments, "proteins_100g", "proteins")
         val carbs = getNutrientOrNull(nutriments, "carbohydrates_100g", "carbohydrates")
         val fat = getNutrientOrNull(nutriments, "fat_100g", "fat")
+        val saturatedFat = getNutrientOrNull(nutriments, "saturated-fat_100g", "saturated-fat")
+        val transFat = getNutrientOrNull(nutriments, "trans-fat_100g", "trans-fat")
         val fiber = getNutrientOrNull(nutriments, "fiber_100g", "fiber")
         val sugar = getNutrientOrNull(nutriments, "sugars_100g", "sugars")
-        val sodium = getNutrientOrNull(nutriments, "sodium_100g", "sodium")?.let { it * 1000.0 } // Convert g to mg
+        val addedSugars = getNutrientOrNull(nutriments, "added-sugars_100g", "added-sugars")
+        val sodium = getNutrientOrNull(nutriments, "sodium_100g", "sodium")?.let { it * 1000.0 }
+        val salt = getNutrientOrNull(nutriments, "salt_100g", "salt")
 
         val completeness = NutritionCalculator.evaluateCompleteness(
             calories = kcal,
@@ -170,19 +236,28 @@ class OpenFoodFactsClient(
             barcode = barcode,
             barcodeFormat = inferBarcodeFormat(barcode),
             name = productName,
+            nameHi = nameHi,
             brand = brands,
+            brandAliases = brandAliases,
+            category = primaryCategory,
             variant = genericName,
             packageDescription = packageDesc,
+            netQuantityValue = netQuantityValue,
+            netQuantityUnit = netQuantityUnit,
             servingSize = servingSize,
             servingUnit = servingUnit,
             nutritionBasis = basis,
             energyKcal = kcal,
             proteinGrams = proteins,
             carbohydratesGrams = carbs,
-            fatGrams = fat,
-            fiberGrams = fiber,
             sugarGrams = sugar,
+            addedSugarsGrams = addedSugars,
+            fatGrams = fat,
+            saturatedFatGrams = saturatedFat,
+            transFatGrams = transFat,
+            fiberGrams = fiber,
             sodiumMilligrams = sodium,
+            saltGrams = salt,
             source = ProductSource.OPEN_FOOD_FACTS,
             sourceProductId = barcode,
             lastVerifiedAt = Instant.now(),

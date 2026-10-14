@@ -25,7 +25,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FoodProductEntity::class,
         FoodLogEntryEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class SomnusDatabase : RoomDatabase() {
@@ -245,9 +245,38 @@ abstract class SomnusDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 4 to version 5
+         * adding India-First FSSAI fields, Hindi support, brand aliases, and package serving fields.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Alter food_products table
+                db.execSQL("ALTER TABLE `food_products` ADD COLUMN `nameHi` TEXT")
+                db.execSQL("ALTER TABLE `food_products` ADD COLUMN `brandAliasesJson` TEXT NOT NULL DEFAULT '[]'")
+                db.execSQL("ALTER TABLE `food_products` ADD COLUMN `category` TEXT")
+                db.execSQL("ALTER TABLE `food_products` ADD COLUMN `netQuantityValue` REAL")
+                db.execSQL("ALTER TABLE `food_products` ADD COLUMN `netQuantityUnit` TEXT NOT NULL DEFAULT 'GRAMS'")
+                db.execSQL("ALTER TABLE `food_products` ADD COLUMN `addedSugarsGrams` REAL")
+                db.execSQL("ALTER TABLE `food_products` ADD COLUMN `saturatedFatGrams` REAL")
+                db.execSQL("ALTER TABLE `food_products` ADD COLUMN `transFatGrams` REAL")
+                db.execSQL("ALTER TABLE `food_products` ADD COLUMN `saltGrams` REAL")
+                db.execSQL("ALTER TABLE `food_products` ADD COLUMN `fssaiLicenseNumber` TEXT")
+
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_food_products_nameHi` ON `food_products` (`nameHi`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_food_products_category` ON `food_products` (`category`)")
+
+                // Alter food_log_entries table
+                db.execSQL("ALTER TABLE `food_log_entries` ADD COLUMN `calculatedSaturatedFat` REAL")
+                db.execSQL("ALTER TABLE `food_log_entries` ADD COLUMN `calculatedTransFat` REAL")
+                db.execSQL("ALTER TABLE `food_log_entries` ADD COLUMN `calculatedAddedSugars` REAL")
+                db.execSQL("ALTER TABLE `food_log_entries` ADD COLUMN `calculatedSaltG` REAL")
+            }
+        }
+
+        /**
          * List of explicit Room migrations.
          */
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
         fun buildDatabase(context: Context, databaseName: String = DATABASE_NAME): SomnusDatabase {
             return Room.databaseBuilder(

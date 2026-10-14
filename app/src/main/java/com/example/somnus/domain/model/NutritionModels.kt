@@ -5,6 +5,8 @@ import java.time.LocalDate
 
 /**
  * Standard barcode formats recognized by retail food packages.
+ * Prioritizes EAN-13 (GTIN-13) and EAN-8 as primary Indian formats,
+ * alongside UPC-A/UPC-E for imported products and QR codes.
  */
 enum class BarcodeFormat(val displayName: String) {
     EAN_13("EAN-13"),
@@ -17,6 +19,7 @@ enum class BarcodeFormat(val displayName: String) {
 
 /**
  * Nutritional basis used on food labels.
+ * Indian FSSAI regulations commonly mandate per-100g, per-100ml, and/or per-serving values.
  */
 enum class NutritionBasis(val displayName: String) {
     PER_100_G("per 100 g"),
@@ -32,7 +35,7 @@ enum class ServingUnit(val symbol: String, val displayName: String) {
     MILLILITERS("ml", "Milliliters"),
     PIECES("pc", "Pieces"),
     SERVINGS("serving", "Servings"),
-    PACKAGES("pkg", "Packages")
+    PACKAGES("pack", "Packets / Packs")
 }
 
 /**
@@ -40,9 +43,27 @@ enum class ServingUnit(val symbol: String, val displayName: String) {
  */
 enum class ProductSource(val displayName: String, val isUserGenerated: Boolean) {
     LOCAL_USER("User Created", true),
-    OPEN_FOOD_FACTS("Open Food Facts", false),
+    USER_VERIFIED("Verified by User", true),
+    OPEN_FOOD_FACTS("Open Food Facts (ODbL)", false),
     HEALTH_CONNECT("Health Connect", false),
     VERIFIED_CATALOGUE("Verified Database", false)
+}
+
+/**
+ * Core packaged food categories commonly found in Indian retail.
+ */
+enum class IndianFoodCategory(val displayName: String, val displayNameHi: String) {
+    BISCUITS_AND_COOKIES("Biscuits & Cookies", "बिस्कुट और कुकीज़"),
+    NAMKEEN_AND_SAVOURY("Namkeen & Savoury Snacks", "नमकीन और भुजिया"),
+    CHIPS_AND_CRISPS("Chips & Savoury Foods", "चिप्स और वेफर्स"),
+    NOODLES_AND_MEALS("Instant Noodles & Ready Meals", "इंस्टेंट नूडल्स और भोजन"),
+    CHOCOLATE_AND_SWEETS("Chocolates & Confectionery", "चॉकलेट और मिठाई"),
+    BEVERAGES("Packaged Beverages", "पेय पदार्थ"),
+    CEREALS_AND_BARS("Breakfast Cereals & Snack Bars", "सीरियल और स्नैक बार"),
+    DAIRY("Packaged Dairy Products", "डेयरी उत्पाद"),
+    REGIONAL_SNACKS("Regional Indian Snacks", "पारंपरिक स्नैक्स"),
+    IMPORTED("Imported Foods", "आयातित उत्पाद"),
+    OTHER("Other Packaged Food", "अन्य खाद्य उत्पाद")
 }
 
 /**
@@ -66,25 +87,36 @@ enum class MealType(val displayName: String) {
 
 /**
  * Domain representation of a food product in the local catalogue.
+ * Accommodates Indian FSSAI labeling mandates (Added sugars, Saturated Fat, Trans Fat, Salt vs Sodium).
  */
 data class FoodProduct(
     val id: String,
     val barcode: String,
     val barcodeFormat: BarcodeFormat = BarcodeFormat.EAN_13,
     val name: String,
+    val nameHi: String? = null,
     val brand: String? = null,
+    val brandAliases: List<String> = emptyList(),
+    val category: String? = null,
     val variant: String? = null,
     val packageDescription: String? = null,
+    val netQuantityValue: Double? = null,
+    val netQuantityUnit: ServingUnit = ServingUnit.GRAMS,
     val servingSize: Double? = null,
     val servingUnit: ServingUnit = ServingUnit.GRAMS,
     val nutritionBasis: NutritionBasis = NutritionBasis.PER_100_G,
     val energyKcal: Double,
     val proteinGrams: Double? = null,
     val carbohydratesGrams: Double? = null,
-    val fatGrams: Double? = null,
-    val fiberGrams: Double? = null,
     val sugarGrams: Double? = null,
+    val addedSugarsGrams: Double? = null,
+    val fatGrams: Double? = null,
+    val saturatedFatGrams: Double? = null,
+    val transFatGrams: Double? = null,
+    val fiberGrams: Double? = null,
     val sodiumMilligrams: Double? = null,
+    val saltGrams: Double? = null,
+    val fssaiLicenseNumber: String? = null,
     val source: ProductSource = ProductSource.LOCAL_USER,
     val sourceProductId: String? = null,
     val lastVerifiedAt: Instant = Instant.now(),
@@ -97,6 +129,13 @@ data class FoodProduct(
         require(barcode.isNotBlank()) { "Barcode cannot be blank" }
         require(name.isNotBlank()) { "Product name cannot be blank" }
     }
+
+    /**
+     * Checks if this product barcode carries the GS1 India prefix (890).
+     * Informational only — never used as proof of manufacturing or to reject other valid prefixes.
+     */
+    val isGs1IndiaPrefix: Boolean
+        get() = barcode.startsWith("890")
 }
 
 /**
@@ -120,9 +159,13 @@ data class FoodLogEntry(
     val calculatedProtein: Double? = null,
     val calculatedCarbs: Double? = null,
     val calculatedFat: Double? = null,
-    val calculatedFiber: Double? = null,
+    val calculatedSaturatedFat: Double? = null,
+    val calculatedTransFat: Double? = null,
     val calculatedSugar: Double? = null,
+    val calculatedAddedSugars: Double? = null,
+    val calculatedFiber: Double? = null,
     val calculatedSodiumMg: Double? = null,
+    val calculatedSaltG: Double? = null,
     val source: ProductSource = ProductSource.LOCAL_USER,
     val externalRecordId: String? = null
 ) {
