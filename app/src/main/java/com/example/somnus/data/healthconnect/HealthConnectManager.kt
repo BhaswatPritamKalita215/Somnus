@@ -43,6 +43,17 @@ class HealthConnectManager(
         clientWrapper.hasStepPermissions()
     }
 
+    suspend fun hasEnergyExpenditurePermissions(): Boolean = withContext(ioDispatcher) {
+        clientWrapper.hasEnergyExpenditurePermissions()
+    }
+
+    suspend fun getEnergyExpenditure(
+        startTime: Instant,
+        endTime: Instant
+    ): HealthConnectEnergyExpenditure = withContext(ioDispatcher) {
+        clientWrapper.readEnergyExpenditure(startTime, endTime)
+    }
+
     suspend fun syncSleepRecords(
         startTime: Instant,
         endTime: Instant

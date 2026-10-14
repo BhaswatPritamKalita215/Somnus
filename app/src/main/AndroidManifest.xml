@@ -1,14 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Health Connect Permissions for importing wearable sleep records and steps -->
+    <!-- Health Connect Permissions for importing wearable sleep records, steps, nutrition & calories -->
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="androidx.health.permission.SleepSessionRecord.READ" />
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="androidx.health.permission.StepsRecord.READ" />
+    <uses-permission android:name="android.permission.health.READ_NUTRITION" />
+    <uses-permission android:name="androidx.health.permission.NutritionRecord.READ" />
+    <uses-permission android:name="android.permission.health.WRITE_NUTRITION" />
+    <uses-permission android:name="androidx.health.permission.NutritionRecord.WRITE" />
+    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
+    <uses-permission android:name="androidx.health.permission.TotalCaloriesBurnedRecord.READ" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="androidx.health.permission.ActiveCaloriesBurnedRecord.READ" />
 
     <!-- Runtime permission for hardware step counter / detector on Android 10+ (API 29+) -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- Camera permission for barcode scanner (camera is not strictly required for app installation) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- Network permissions for optional disclosed Open Food Facts product database lookup -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Queries declaration for Health Connect client packages -->
     <queries>

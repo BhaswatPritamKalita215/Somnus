@@ -47,3 +47,14 @@ data class HealthConnectSyncSummary(
     val totalQueried: Int,
     val message: String
 )
+
+/**
+ * Energy expenditure metrics from Health Connect.
+ * Strictly segregates active energy burned from total energy expenditure.
+ */
+data class HealthConnectEnergyExpenditure(
+    val activeCaloriesKcal: Double? = null,
+    val totalCaloriesKcal: Double? = null,
+    val sourcePackage: String? = null
+)
+

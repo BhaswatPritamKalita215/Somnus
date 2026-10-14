@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -40,12 +41,15 @@ import com.example.somnus.ui.home.HomeScreen
 import com.example.somnus.ui.home.HomeViewModel
 import com.example.somnus.ui.insights.InsightsScreen
 import com.example.somnus.ui.insights.InsightsViewModel
+import com.example.somnus.ui.nutrition.NutritionScreen
+import com.example.somnus.ui.nutrition.NutritionViewModel
 import com.example.somnus.ui.settings.SettingsScreen
 import com.example.somnus.ui.settings.SettingsViewModel
 
 sealed interface Screen {
     data object Track : Screen
     data object Activity : Screen
+    data object Nutrition : Screen
     data object History : Screen
     data object Analytics : Screen
     data object Insights : Screen
@@ -80,7 +84,7 @@ fun SomnusApp() {
         }
 
         fun navigateTo(screen: Screen) {
-            if (screen == Screen.Track || screen == Screen.Activity || screen == Screen.History || screen == Screen.Analytics || screen == Screen.Insights || screen == Screen.Settings) {
+            if (screen == Screen.Track || screen == Screen.Activity || screen == Screen.Nutrition || screen == Screen.History || screen == Screen.Analytics || screen == Screen.Insights || screen == Screen.Settings) {
                 // Top-level tab switch: clear backstack to root
                 backStack.clear()
                 backStack.add(screen)
@@ -105,6 +109,12 @@ fun SomnusApp() {
                             onClick = { navigateTo(Screen.Activity) },
                             icon = { Icon(Icons.AutoMirrored.Filled.DirectionsWalk, contentDescription = "Activity") },
                             label = { Text("Activity") }
+                        )
+                        NavigationBarItem(
+                            selected = currentScreen is Screen.Nutrition,
+                            onClick = { navigateTo(Screen.Nutrition) },
+                            icon = { Icon(Icons.Default.Restaurant, contentDescription = "Nutrition") },
+                            label = { Text("Food") }
                         )
                         NavigationBarItem(
                             selected = currentScreen is Screen.History,
@@ -165,6 +175,20 @@ fun SomnusApp() {
                         )
                         ActivityScreen(
                             viewModel = activityViewModel
+                        )
+                    }
+
+                    is Screen.Nutrition -> {
+                        val nutritionViewModel: NutritionViewModel = viewModel(
+                            factory = NutritionViewModel.provideFactory(
+                                foodProductRepository = container.foodProductRepository,
+                                foodLogRepository = container.foodLogRepository,
+                                userPreferencesRepository = container.userPreferencesRepository,
+                                healthConnectManager = container.healthConnectManager
+                            )
+                        )
+                        NutritionScreen(
+                            viewModel = nutritionViewModel
                         )
                     }
 

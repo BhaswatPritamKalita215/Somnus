@@ -238,4 +238,180 @@ class SomnusDatabaseMigrationTest {
         dbV2.close()
         dbFile.delete()
     }
+
+    @Test
+    fun migration3To4_preservesExistingDataAndCreatesFoodTables() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbFile = File(context.cacheDir, "test_migration_3_4.db")
+        if (dbFile.exists()) dbFile.delete()
+
+        val configuration = androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name(dbFile.name)
+            .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(3) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    // Create Schema Version 3
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `sleep_sessions` (
+                            `id` TEXT NOT NULL,
+                            `startTime` INTEGER NOT NULL,
+                            `endTime` INTEGER,
+                            `timezoneId` TEXT NOT NULL,
+                            `status` TEXT NOT NULL,
+                            `source` TEXT NOT NULL,
+                            `createdAt` INTEGER NOT NULL,
+                            `updatedAt` INTEGER NOT NULL,
+                            `notes` TEXT,
+                            `isCorrected` INTEGER NOT NULL,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `sol_records` (
+                            `id` TEXT NOT NULL,
+                            `sessionId` TEXT,
+                            `reportingDate` TEXT NOT NULL,
+                            `zoneId` TEXT NOT NULL,
+                            `latencyMinutes` INTEGER NOT NULL,
+                            `method` TEXT NOT NULL,
+                            `sourceIdentifier` TEXT NOT NULL,
+                            `sourceDeviceModel` TEXT,
+                            `qualityFlags` TEXT NOT NULL,
+                            `createdAt` INTEGER NOT NULL,
+                            `updatedAt` INTEGER NOT NULL,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `psqi_assessments` (
+                            `id` TEXT NOT NULL,
+                            `startedAt` INTEGER NOT NULL,
+                            `completedAt` INTEGER,
+                            `version` TEXT NOT NULL,
+                            `language` TEXT NOT NULL,
+                            `reportingPeriod` TEXT NOT NULL,
+                            `status` TEXT NOT NULL,
+                            `scoringVersion` TEXT NOT NULL,
+                            `globalScore` INTEGER,
+                            `component1Duration` INTEGER,
+                            `component2Disturbance` INTEGER,
+                            `component3Latency` INTEGER,
+                            `component4Efficiency` INTEGER,
+                            `component5Quality` INTEGER,
+                            `component6Medication` INTEGER,
+                            `component7DaytimeDysfunction` INTEGER,
+                            `responsesJson` TEXT NOT NULL,
+                            `calculationNotes` TEXT,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `step_records` (
+                            `id` TEXT NOT NULL,
+                            `startTime` INTEGER NOT NULL,
+                            `endTime` INTEGER NOT NULL,
+                            `localDate` TEXT NOT NULL,
+                            `zoneId` TEXT NOT NULL,
+                            `stepCount` INTEGER NOT NULL,
+                            `source` TEXT NOT NULL,
+                            `sourceIdentifier` TEXT,
+                            `createdAt` INTEGER NOT NULL,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `step_checkpoints` (
+                            `id` TEXT NOT NULL,
+                            `bootTimestamp` INTEGER NOT NULL,
+                            `lastSensorValue` REAL NOT NULL,
+                            `accumulatedSteps` INTEGER NOT NULL,
+                            `lastUpdateEpochMs` INTEGER NOT NULL,
+                            `localDate` TEXT NOT NULL,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                }
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+            })
+            .build()
+
+        val helper = FrameworkSQLiteOpenHelperFactory().create(configuration)
+        val dbV3 = helper.writableDatabase
+
+        // Insert sample records in v3
+        dbV3.execSQL("INSERT INTO sleep_sessions (id, startTime, timezoneId, status, source, createdAt, updatedAt, isCorrected) VALUES ('s3', 1000, 'UTC', 'COMPLETED', 'MANUAL', 1000, 1000, 0)")
+        dbV3.execSQL("INSERT INTO step_records (id, startTime, endTime, localDate, zoneId, stepCount, source, createdAt) VALUES ('step-3', 1000, 2000, '2026-10-14', 'UTC', 500, 'PHONE_HARDWARE', 2000)")
+
+        // Apply MIGRATION_3_4
+        SomnusDatabase.MIGRATION_3_4.migrate(dbV3)
+
+        // Verify v3 records are preserved
+        val sCursor = dbV3.query("SELECT id FROM sleep_sessions WHERE id = 's3'")
+        assertTrue(sCursor.moveToFirst())
+        assertEquals("s3", sCursor.getString(0))
+        sCursor.close()
+
+        val stepCursor = dbV3.query("SELECT id, stepCount FROM step_records WHERE id = 'step-3'")
+        assertTrue(stepCursor.moveToFirst())
+        assertEquals("step-3", stepCursor.getString(0))
+        assertEquals(500, stepCursor.getLong(1))
+        stepCursor.close()
+
+        // Verify food_products table accepts insertion
+        dbV3.execSQL(
+            """
+            INSERT INTO food_products (
+                id, barcode, barcodeFormat, name, brand, variant, packageDescription,
+                servingSize, servingUnit, nutritionBasis, energyKcal, proteinGrams,
+                carbohydratesGrams, fatGrams, fiberGrams, sugarGrams, sodiumMilligrams,
+                source, sourceProductId, lastVerifiedAt, isUserModified, completeness, notes
+            ) VALUES (
+                'fp-1', '3017620422003', 'EAN_13', 'Nutella Hazelnut Spread', 'Ferrero', NULL, '400g jar',
+                15.0, 'GRAMS', 'PER_100_G', 539.0, 6.3, 57.5, 30.9, NULL, 56.3, 42.0,
+                'OPEN_FOOD_FACTS', '3017620422003', 1700000000000, 0, 'COMPLETE', NULL
+            )
+            """.trimIndent()
+        )
+        val fpCursor = dbV3.query("SELECT id, name, energyKcal FROM food_products WHERE barcode = '3017620422003'")
+        assertTrue(fpCursor.moveToFirst())
+        assertEquals("fp-1", fpCursor.getString(0))
+        assertEquals("Nutella Hazelnut Spread", fpCursor.getString(1))
+        assertEquals(539.0, fpCursor.getDouble(2), 0.01)
+        fpCursor.close()
+
+        // Verify food_log_entries table accepts insertion
+        dbV3.execSQL(
+            """
+            INSERT INTO food_log_entries (
+                id, productId, barcode, productName, brand, mealType, loggedAt, localDate,
+                quantity, unit, numberOfServings, calculatedCalories, calculatedProtein,
+                calculatedCarbs, calculatedFat, calculatedFiber, calculatedSugar,
+                calculatedSodiumMg, source, externalRecordId
+            ) VALUES (
+                'log-1', 'fp-1', '3017620422003', 'Nutella Hazelnut Spread', 'Ferrero', 'BREAKFAST', 1700000000000, '2026-10-14',
+                30.0, 'GRAMS', 2.0, 161.7, 1.89, 17.25, 9.27, NULL, 16.89, 12.6,
+                'OPEN_FOOD_FACTS', NULL
+            )
+            """.trimIndent()
+        )
+        val logCursor = dbV3.query("SELECT id, calculatedCalories, mealType FROM food_log_entries WHERE id = 'log-1'")
+        assertTrue(logCursor.moveToFirst())
+        assertEquals("log-1", logCursor.getString(0))
+        assertEquals(161.7, logCursor.getDouble(1), 0.01)
+        assertEquals("BREAKFAST", logCursor.getString(2))
+        logCursor.close()
+
+        dbV3.close()
+        dbFile.delete()
+    }
 }

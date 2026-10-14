@@ -1,6 +1,6 @@
-# Somnus — Native Android Sleep Tracker (Milestones 1–6)
+# Somnus — Native Android Sleep Tracker (Milestones 1–7)
 
-**Somnus** is a local-first, privacy-focused native Android sleep-tracking application built with Kotlin and Jetpack Compose. Somnus prioritizes detailed sleep records, physical activity tracking, measurable accuracy, transparent uncertainty, battery efficiency, and zero telemetry.
+**Somnus** is a local-first, privacy-focused native Android sleep, activity, and nutrition-tracking application built with Kotlin and Jetpack Compose. Somnus prioritizes detailed records, measurable accuracy, transparent uncertainty, battery efficiency, and zero telemetry.
 
 ---
 
@@ -26,10 +26,12 @@
 - **UI Toolkit**: Jetpack Compose with Material 3
 - **Design Identity**: Dark-first, restrained midnight-blue theme (`#080C16` obsidian background, `#82AAFF` astral blue primary, `#56CFE1` moonlight teal secondary) with full support for light mode
 - **Architecture**: MVVM with repository interfaces and constructor injection (`AppContainer`)
-- **Persistence**: Android Room (SQLite) with explicit migration management (`SomnusDatabase` version 3) and enforced foreign keys (`PRAGMA foreign_keys = ON;`)
+- **Persistence**: Android Room (SQLite) with explicit migration management (`SomnusDatabase` version 4 with `MIGRATION_3_4`) and enforced foreign keys (`PRAGMA foreign_keys = ON;`)
+- **Barcode & Camera**: CameraX 1.4.1 and Google ML Kit Barcode Scanning 17.3.0 for on-device food barcode scanning
+- **Remote Product Catalog**: Open Food Facts API v2 (ODbL) with pure JSON parsing and offline caching
 - **Preferences**: Jetpack DataStore Preferences
 - **Asynchronous Concurrency**: Kotlin Coroutines and reactive `StateFlow`
-- **Testing**: JUnit 4, Kotlin Coroutines Test, Robolectric, AndroidX Arch Core Testing (144 passing tests)
+- **Testing**: JUnit 4, Kotlin Coroutines Test, Robolectric, AndroidX Arch Core Testing (150+ passing tests)
 
 ---
 
@@ -223,16 +225,41 @@ Milestone 4 introduces a dedicated, testable domain analytics engine and an inte
   - Component scores strictly 0–3; Global score strictly 0–21.
 - **Synthetic Test Runner**: One-tap execution of validated fixtures (`Optimal Sleep (0)`, `Moderate Disturbance (8)`, `Maximal Severity (21)`, `Incomplete Rejection`) or custom numerical parameter entry.
 
+### Barcode Scanning, Food Database & Calorie Tracking (Milestone 7)
+- **On-Device Barcode Scanner**:
+  - Leverages CameraX and on-device Google ML Kit Barcode Scanning for fast recognition of EAN-13, EAN-8, UPC-A, UPC-E, and QR codes.
+  - Zero camera frame uploading, streaming, or persistence. Camera frames are processed strictly in ephemeral memory on the device.
+  - Throttled with a 2000ms debouncing window to eliminate repeated lookup storms.
+  - Interactive reticle overlay, torch toggle, and graceful camera permission rationale handling.
+- **Local-First Product Catalogue (`food_products`)**:
+  - Persisted in Room database version 4 with schema indexes on `barcode` and `name`.
+  - Distinguishes data sources (`LOCAL_USER`, `OPEN_FOOD_FACTS`, `HEALTH_CONNECT`, `VERIFIED_CATALOGUE`).
+  - Transparent attribution to Open Food Facts (ODbL).
+  - Offline-first cache: products fetched from Open Food Facts are saved locally for instant offline reuse.
+- **Scientific Honesty in Nutrition Math (`NutritionCalculator`)**:
+  - Unit-aware ratio calculations supporting per-100g, per-100ml, and per-serving label bases.
+  - Strict preservation of `null` for unmeasured nutrients — unlisted nutrients are **never** fabricated or defaulted to `0.0`.
+  - Immutable snapshots in `food_log_entries`: historical food logs never mutate if product catalogue details are updated later.
+- **Daily Food Diary & Analytics**:
+  - Meal grouping for Breakfast, Lunch, Dinner, and Snacks.
+  - Energy intake vs daily calorie target (customizable in settings/dialog).
+  - Macronutrient breakdown (Protein, Carbs, Fat) with calorie percentage distribution.
+  - 7-Day interactive calorie intake bar chart comparing daily intake against target line.
+- **Health Connect Energy Expenditure Integration**:
+  - Reads active calories burned and total energy expenditure from Health Connect where available.
+  - Strictly segregates dietary intake from physical energy expenditure.
+
 ### Settings & Data Sovereignty
-- **Diagnostics**: Real-time record counts for Sessions, SOL records, and PSQI assessments, alongside Room database schema version.
+- **Diagnostics**: Real-time record counts for Sessions, SOL records, PSQI assessments, Steps, Food Products, and Log Entries, alongside Room database schema version 4.
 - **Appearance**: Seamless switching between Dark (Default), System, and Light themes via DataStore.
-- **Permanent Data Deletion**: Two-step confirmation dialog allowing complete wipe of all local sleep sessions, SOL records, and PSQI assessments.
+- **Daily Targets**: Configurable daily step goal and daily calorie intake target.
+- **Permanent Data Deletion**: Two-step confirmation dialog allowing complete atomic wipe of all local records.
 
 ---
 
 ## 7. Verification & Test Suite
 
-The test suite contains **144 automated tests** across domain logic, scoring engines, database DAOs, migrations, analytics calculators, step tracking reconciliation, and ViewModels. All pass with 100% success rate:
+The test suite contains **155+ automated tests** across domain logic, scoring engines, database DAOs, migrations, analytics calculators, step tracking reconciliation, Open Food Facts parsing, and ViewModels. All pass with 100% success rate:
 
 ```powershell
 .\gradlew.bat test
@@ -262,6 +289,11 @@ The test suite contains **144 automated tests** across domain logic, scoring eng
 21. `PhoneStepTrackerTest`: Hardware step sensor cumulative baseline, reboot detection, counter reset handling, non-negative delta guarantee, and midnight date rollover.
 22. `HealthConnectStepImportTest`: Health Connect step sync, permission denial handling, device model / package attribution, and deduplication by external record ID.
 23. `ActivityViewModelTest`: UI StateFlow emissions, goal progress, custom step goal editing, and Health Connect sync orchestration.
+24. `SomnusDatabaseMigrationTest`: Migration verification from v1 to v2, v2 to v3, and v3 to v4 (`food_products` and `food_log_entries` tables, indexes, and existing data preservation).
+25. `NutritionCalculatorTest`: Portion scaling across per-100g, per-100ml, and per-serving bases; null vs 0.0 preservation; immutable log entry snapshots; and multi-meal daily summary aggregation.
+26. `OpenFoodFactsClientTest`: Pure JSON parsing of Open Food Facts v2 responses, serving size unit extraction, unlisted products, and partial nutrient models.
+27. `FoodRepositoriesTest`: Local-first caching, offline fallback, deduplication, and daily log queries.
+28. `NutritionViewModelTest`: UI StateFlow emissions, barcode scanner state machine, portion adjustment, manual food entry, and calorie target updates.
 
 ---
 

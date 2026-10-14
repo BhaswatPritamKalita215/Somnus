@@ -56,6 +56,19 @@ class FakeHealthConnectClientWrapper : HealthConnectClientWrapper {
         shouldThrowException?.let { throw it }
         return stepRecordsToReturn
     }
+
+    var energyPermissionsGranted: Boolean = true
+    var energyExpenditureToReturn: HealthConnectEnergyExpenditure = HealthConnectEnergyExpenditure()
+
+    override suspend fun hasEnergyExpenditurePermissions(): Boolean = energyPermissionsGranted
+
+    override suspend fun readEnergyExpenditure(
+        startTime: Instant,
+        endTime: Instant
+    ): HealthConnectEnergyExpenditure {
+        shouldThrowException?.let { throw it }
+        return energyExpenditureToReturn
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

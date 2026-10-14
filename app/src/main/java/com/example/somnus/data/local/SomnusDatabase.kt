@@ -21,9 +21,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SolRecordEntity::class,
         PsqiAssessmentEntity::class,
         StepRecordEntity::class,
-        StepCounterCheckpointEntity::class
+        StepCounterCheckpointEntity::class,
+        FoodProductEntity::class,
+        FoodLogEntryEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class SomnusDatabase : RoomDatabase() {
@@ -33,13 +35,17 @@ abstract class SomnusDatabase : RoomDatabase() {
     abstract fun psqiDao(): PsqiDao
     abstract fun stepRecordDao(): StepRecordDao
     abstract fun stepCheckpointDao(): StepCheckpointDao
+    abstract fun foodProductDao(): FoodProductDao
+    abstract fun foodLogDao(): FoodLogDao
 
     /**
-     * Atomically clears all sleep-tracking and activity data tables in a single database transaction.
+     * Atomically clears all sleep-tracking, activity, and nutrition data tables in a single database transaction.
      * Prevents partial deletion states if interrupted.
      */
     @androidx.room.Transaction
     open suspend fun clearAllDataTables() {
+        foodLogDao().deleteAll()
+        foodProductDao().deleteAll()
         stepCheckpointDao().deleteAll()
         stepRecordDao().deleteAll()
         solRecordDao().deleteAll()
@@ -166,9 +172,82 @@ abstract class SomnusDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 3 to version 4
+         * adding Nutrition and Food Catalogue tables: `food_products` and `food_log_entries`.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create food_products table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `food_products` (
+                        `id` TEXT NOT NULL PRIMARY KEY,
+                        `barcode` TEXT NOT NULL,
+                        `barcodeFormat` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `brand` TEXT,
+                        `variant` TEXT,
+                        `packageDescription` TEXT,
+                        `servingSize` REAL,
+                        `servingUnit` TEXT NOT NULL,
+                        `nutritionBasis` TEXT NOT NULL,
+                        `energyKcal` REAL NOT NULL,
+                        `proteinGrams` REAL,
+                        `carbohydratesGrams` REAL,
+                        `fatGrams` REAL,
+                        `fiberGrams` REAL,
+                        `sugarGrams` REAL,
+                        `sodiumMilligrams` REAL,
+                        `source` TEXT NOT NULL,
+                        `sourceProductId` TEXT,
+                        `lastVerifiedAt` INTEGER NOT NULL,
+                        `isUserModified` INTEGER NOT NULL,
+                        `completeness` TEXT NOT NULL,
+                        `notes` TEXT
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_food_products_barcode` ON `food_products` (`barcode`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_food_products_name` ON `food_products` (`name`)")
+
+                // Create food_log_entries table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `food_log_entries` (
+                        `id` TEXT NOT NULL PRIMARY KEY,
+                        `productId` TEXT,
+                        `barcode` TEXT,
+                        `productName` TEXT NOT NULL,
+                        `brand` TEXT,
+                        `mealType` TEXT NOT NULL,
+                        `loggedAt` INTEGER NOT NULL,
+                        `localDate` TEXT NOT NULL,
+                        `quantity` REAL NOT NULL,
+                        `unit` TEXT NOT NULL,
+                        `numberOfServings` REAL,
+                        `calculatedCalories` REAL NOT NULL,
+                        `calculatedProtein` REAL,
+                        `calculatedCarbs` REAL,
+                        `calculatedFat` REAL,
+                        `calculatedFiber` REAL,
+                        `calculatedSugar` REAL,
+                        `calculatedSodiumMg` REAL,
+                        `source` TEXT NOT NULL,
+                        `externalRecordId` TEXT
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_food_log_entries_localDate` ON `food_log_entries` (`localDate`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_food_log_entries_loggedAt` ON `food_log_entries` (`loggedAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_food_log_entries_barcode` ON `food_log_entries` (`barcode`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_food_log_entries_externalRecordId` ON `food_log_entries` (`externalRecordId`)")
+            }
+        }
+
+        /**
          * List of explicit Room migrations.
          */
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
         fun buildDatabase(context: Context, databaseName: String = DATABASE_NAME): SomnusDatabase {
             return Room.databaseBuilder(

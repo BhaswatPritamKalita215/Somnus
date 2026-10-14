@@ -23,7 +23,8 @@ data class UserPreferences(
     val themeMode: ThemeMode = ThemeMode.DARK,
     val policyAcknowledged: Boolean = false,
     val dailyStepGoal: Int = 8000,
-    val phoneStepTrackingEnabled: Boolean = true
+    val phoneStepTrackingEnabled: Boolean = true,
+    val dailyCalorieTarget: Int = 2000
 )
 
 class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
@@ -33,6 +34,7 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val POLICY_ACKNOWLEDGED = booleanPreferencesKey("policy_acknowledged")
         val DAILY_STEP_GOAL = intPreferencesKey("daily_step_goal")
         val PHONE_STEP_TRACKING_ENABLED = booleanPreferencesKey("phone_step_tracking_enabled")
+        val DAILY_CALORIE_TARGET = intPreferencesKey("daily_calorie_target")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data.map { preferences ->
@@ -45,11 +47,13 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val acknowledged = preferences[PreferencesKeys.POLICY_ACKNOWLEDGED] ?: false
         val dailyStepGoal = preferences[PreferencesKeys.DAILY_STEP_GOAL] ?: 8000
         val phoneStepTrackingEnabled = preferences[PreferencesKeys.PHONE_STEP_TRACKING_ENABLED] ?: true
+        val dailyCalorieTarget = preferences[PreferencesKeys.DAILY_CALORIE_TARGET] ?: 2000
         UserPreferences(
             themeMode = themeMode,
             policyAcknowledged = acknowledged,
             dailyStepGoal = dailyStepGoal,
-            phoneStepTrackingEnabled = phoneStepTrackingEnabled
+            phoneStepTrackingEnabled = phoneStepTrackingEnabled,
+            dailyCalorieTarget = dailyCalorieTarget
         )
     }
 
@@ -74,6 +78,12 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setPhoneStepTrackingEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.PHONE_STEP_TRACKING_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setDailyCalorieTarget(target: Int) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DAILY_CALORIE_TARGET] = target.coerceIn(500, 10000)
         }
     }
 }

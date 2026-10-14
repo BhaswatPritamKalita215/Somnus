@@ -36,6 +36,8 @@ interface AppContainer {
     val phoneSensorTracker: com.example.somnus.data.sensor.PhoneSensorTracker
     val stepRepository: StepRepository
     val phoneStepTracker: PhoneStepTracker
+    val foodProductRepository: com.example.somnus.data.repository.FoodProductRepository
+    val foodLogRepository: com.example.somnus.data.repository.FoodLogRepository
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -100,6 +102,19 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             context = context,
             stepRepository = stepRepository,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        )
+    }
+
+    override val foodProductRepository: com.example.somnus.data.repository.FoodProductRepository by lazy {
+        com.example.somnus.data.repository.FoodProductRepositoryImpl(
+            foodProductDao = database.foodProductDao(),
+            remoteClient = com.example.somnus.data.network.OpenFoodFactsClient()
+        )
+    }
+
+    override val foodLogRepository: com.example.somnus.data.repository.FoodLogRepository by lazy {
+        com.example.somnus.data.repository.FoodLogRepositoryImpl(
+            foodLogDao = database.foodLogDao()
         )
     }
 }
