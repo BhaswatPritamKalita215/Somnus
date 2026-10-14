@@ -16,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.ButtonDefaults
@@ -30,7 +29,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,7 +56,7 @@ fun SettingsScreen(
 
     LaunchedEffect(state.deletionSuccess) {
         if (state.deletionSuccess) {
-            snackbarHostState.showSnackbar("All sleep sessions have been deleted from this device.")
+            snackbarHostState.showSnackbar("All sleep records have been deleted from this device.")
             viewModel.clearMessages()
         }
     }
@@ -114,8 +112,8 @@ fun SettingsScreen(
         // Delete All Confirmation Dialog
         if (showDeleteAllConfirm) {
             SomnusConfirmDialog(
-                title = "Delete all sleep sessions?",
-                message = "This will permanently remove all ${state.sessionCount} sleep session records from your local database. There is no cloud backup to restore from. Are you sure?",
+                title = "Delete all sleep records?",
+                message = "This will permanently remove ${state.sessionCount} sleep sessions, ${state.solRecordCount} SOL records, and ${state.psqiAssessmentCount} PSQI assessments from your local database. There is no cloud backup to restore from. Are you sure?",
                 confirmText = "Delete Everything",
                 dismissText = "Cancel",
                 isDestructive = true,
@@ -156,8 +154,8 @@ private fun PrivacyPolicyCard(modifier: Modifier = Modifier) {
             Text(
                 text = "• 100% on-device: Somnus has no server backend, accounts, or telemetry.\n" +
                         "• Zero ad or analytics SDKs: No tracking code of any kind is included.\n" +
-                        "• No network transmission: Your bedtime and wake timestamps never leave this physical hardware.\n" +
-                        "• No background sensor drain: Milestone 1 relies entirely on manual start/stop records.",
+                        "• No network transmission: Your bedtime, SOL records, and PSQI answers never leave this physical hardware.\n" +
+                        "• Sourced separation: Wearable estimates are stored alongside, never overwriting, self-reported metrics.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
@@ -197,7 +195,11 @@ private fun DiagnosticsCard(state: SettingsUiState, modifier: Modifier = Modifie
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
             DiagnosticRow("Database Schema", "Version ${state.databaseVersion} (Explicit Migrations)")
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-            DiagnosticRow("Total Sessions Stored", "${state.sessionCount} records")
+            DiagnosticRow("Sleep Sessions Stored", "${state.sessionCount} records")
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            DiagnosticRow("SOL Records Stored", "${state.solRecordCount} records")
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            DiagnosticRow("PSQI Assessments Stored", "${state.psqiAssessmentCount} assessments")
         }
     }
 }
@@ -294,7 +296,7 @@ private fun DataManagementCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Permanently remove all local sleep logs from this device. Once deleted, this data cannot be recovered.",
+                text = "Permanently remove all local sleep logs, SOL records, and PSQI assessments from this device. Once deleted, this data cannot be recovered.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -305,7 +307,7 @@ private fun DataManagementCard(
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isDeleting) "Deleting..." else "Delete All Sleep Sessions")
+                Text(if (isDeleting) "Deleting..." else "Delete All Sleep Data")
             }
         }
     }

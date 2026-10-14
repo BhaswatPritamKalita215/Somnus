@@ -8,11 +8,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,12 +32,15 @@ import com.example.somnus.ui.history.HistoryScreen
 import com.example.somnus.ui.history.HistoryViewModel
 import com.example.somnus.ui.home.HomeScreen
 import com.example.somnus.ui.home.HomeViewModel
+import com.example.somnus.ui.insights.InsightsScreen
+import com.example.somnus.ui.insights.InsightsViewModel
 import com.example.somnus.ui.settings.SettingsScreen
 import com.example.somnus.ui.settings.SettingsViewModel
 
 sealed interface Screen {
     data object Track : Screen
     data object History : Screen
+    data object Insights : Screen
     data object Settings : Screen
     data class Detail(val sessionId: String) : Screen
 }
@@ -69,7 +72,7 @@ fun SomnusApp() {
         }
 
         fun navigateTo(screen: Screen) {
-            if (screen == Screen.Track || screen == Screen.History || screen == Screen.Settings) {
+            if (screen == Screen.Track || screen == Screen.History || screen == Screen.Insights || screen == Screen.Settings) {
                 // Top-level tab switch: clear backstack to root
                 backStack.clear()
                 backStack.add(screen)
@@ -94,6 +97,12 @@ fun SomnusApp() {
                             onClick = { navigateTo(Screen.History) },
                             icon = { Icon(Icons.Default.History, contentDescription = "History") },
                             label = { Text("History") }
+                        )
+                        NavigationBarItem(
+                            selected = currentScreen is Screen.Insights,
+                            onClick = { navigateTo(Screen.Insights) },
+                            icon = { Icon(Icons.Default.Insights, contentDescription = "Insights") },
+                            label = { Text("Insights") }
                         )
                         NavigationBarItem(
                             selected = currentScreen is Screen.Settings,
@@ -137,10 +146,24 @@ fun SomnusApp() {
                         )
                     }
 
+                    is Screen.Insights -> {
+                        val insightsViewModel: InsightsViewModel = viewModel(
+                            factory = InsightsViewModel.provideFactory(
+                                solRepository = container.solRepository,
+                                psqiRepository = container.psqiRepository
+                            )
+                        )
+                        InsightsScreen(
+                            viewModel = insightsViewModel
+                        )
+                    }
+
                     is Screen.Settings -> {
                         val settingsViewModel: SettingsViewModel = viewModel(
                             factory = SettingsViewModel.provideFactory(
-                                repository = container.sleepSessionRepository,
+                                sessionRepository = container.sleepSessionRepository,
+                                solRepository = container.solRepository,
+                                psqiRepository = container.psqiRepository,
                                 preferencesRepository = container.userPreferencesRepository
                             )
                         )

@@ -4,8 +4,12 @@ import android.content.Context
 import com.example.somnus.data.local.SomnusDatabase
 import com.example.somnus.data.preferences.UserPreferencesRepository
 import com.example.somnus.data.preferences.dataStore
+import com.example.somnus.data.repository.PsqiRepository
+import com.example.somnus.data.repository.PsqiRepositoryImpl
 import com.example.somnus.data.repository.SleepSessionRepository
 import com.example.somnus.data.repository.SleepSessionRepositoryImpl
+import com.example.somnus.data.repository.SolRepository
+import com.example.somnus.data.repository.SolRepositoryImpl
 import com.example.somnus.session.SessionManager
 
 /**
@@ -14,6 +18,8 @@ import com.example.somnus.session.SessionManager
 interface AppContainer {
     val database: SomnusDatabase
     val sleepSessionRepository: SleepSessionRepository
+    val solRepository: SolRepository
+    val psqiRepository: PsqiRepository
     val userPreferencesRepository: UserPreferencesRepository
     val sessionManager: SessionManager
 }
@@ -26,6 +32,14 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val sleepSessionRepository: SleepSessionRepository by lazy {
         SleepSessionRepositoryImpl(database.sleepSessionDao())
+    }
+
+    override val solRepository: SolRepository by lazy {
+        SolRepositoryImpl(database.solRecordDao())
+    }
+
+    override val psqiRepository: PsqiRepository by lazy {
+        PsqiRepositoryImpl(database.psqiDao())
     }
 
     override val userPreferencesRepository: UserPreferencesRepository by lazy {
