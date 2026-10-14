@@ -23,9 +23,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         StepRecordEntity::class,
         StepCounterCheckpointEntity::class,
         FoodProductEntity::class,
-        FoodLogEntryEntity::class
+        FoodLogEntryEntity::class,
+        AssistantMessageEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class SomnusDatabase : RoomDatabase() {
@@ -37,13 +38,15 @@ abstract class SomnusDatabase : RoomDatabase() {
     abstract fun stepCheckpointDao(): StepCheckpointDao
     abstract fun foodProductDao(): FoodProductDao
     abstract fun foodLogDao(): FoodLogDao
+    abstract fun assistantMessageDao(): AssistantMessageDao
 
     /**
-     * Atomically clears all sleep-tracking, activity, and nutrition data tables in a single database transaction.
+     * Atomically clears all sleep-tracking, activity, nutrition, and assistant data tables in a single database transaction.
      * Prevents partial deletion states if interrupted.
      */
     @androidx.room.Transaction
     open suspend fun clearAllDataTables() {
+        assistantMessageDao().deleteAll()
         foodLogDao().deleteAll()
         foodProductDao().deleteAll()
         stepCheckpointDao().deleteAll()
@@ -274,9 +277,35 @@ abstract class SomnusDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 5 to version 6
+         * adding assistant_messages table for token-optimized local AI assistant conversation history.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `assistant_messages` (
+                        `id` TEXT NOT NULL,
+                        `role` TEXT NOT NULL,
+                        `content` TEXT NOT NULL,
+                        `timestampEpochMs` INTEGER NOT NULL,
+                        `wasLocalHandled` INTEGER NOT NULL,
+                        `inputTokens` INTEGER NOT NULL,
+                        `outputTokens` INTEGER NOT NULL,
+                        `latencyMs` INTEGER NOT NULL,
+                        `intentType` TEXT,
+                        `referencesJson` TEXT NOT NULL,
+                        `isError` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_assistant_messages_timestampEpochMs` ON `assistant_messages` (`timestampEpochMs`)")
+            }
+        }
+
+        /**
          * List of explicit Room migrations.
          */
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 
         fun buildDatabase(context: Context, databaseName: String = DATABASE_NAME): SomnusDatabase {
             return Room.databaseBuilder(

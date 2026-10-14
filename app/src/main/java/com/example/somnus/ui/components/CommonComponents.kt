@@ -39,7 +39,8 @@ import androidx.compose.ui.unit.dp
 fun SomnusTopBar(
     title: String,
     subtitle: String? = null,
-    onBackClick: (() -> Unit)? = null
+    onBackClick: (() -> Unit)? = null,
+    actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {}
 ) {
     TopAppBar(
         title = {
@@ -80,6 +81,7 @@ fun SomnusTopBar(
                 }
             }
         },
+        actions = actions,
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.background
         )

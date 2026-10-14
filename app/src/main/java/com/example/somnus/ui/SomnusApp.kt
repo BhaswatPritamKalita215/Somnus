@@ -54,6 +54,7 @@ sealed interface Screen {
     data object Analytics : Screen
     data object Insights : Screen
     data object Settings : Screen
+    data object Assistant : Screen
     data class Detail(val sessionId: String) : Screen
 }
 
@@ -96,7 +97,7 @@ fun SomnusApp() {
         Scaffold(
             bottomBar = {
                 // Show bottom navigation on primary screens
-                if (currentScreen !is Screen.Detail) {
+                if (currentScreen !is Screen.Detail && currentScreen !is Screen.Assistant) {
                     NavigationBar {
                         NavigationBarItem(
                             selected = currentScreen is Screen.Track,
@@ -165,7 +166,8 @@ fun SomnusApp() {
                             onNavigateToDetail = { sessionId -> navigateTo(Screen.Detail(sessionId)) },
                             onNavigateToActivity = { navigateTo(Screen.Activity) },
                             onNavigateToNutrition = { navigateTo(Screen.Nutrition) },
-                            onNavigateToAnalytics = { navigateTo(Screen.Analytics) }
+                            onNavigateToAnalytics = { navigateTo(Screen.Analytics) },
+                            onNavigateToAssistant = { navigateTo(Screen.Assistant) }
                         )
                     }
 
@@ -257,6 +259,18 @@ fun SomnusApp() {
                         )
                         SessionDetailScreen(
                             viewModel = detailViewModel,
+                            onNavigateBack = { backStack.removeLastOrNull() }
+                        )
+                    }
+
+                    is Screen.Assistant -> {
+                        val assistantViewModel: com.example.somnus.ui.assistant.AssistantViewModel = viewModel(
+                            factory = com.example.somnus.ui.assistant.AssistantViewModel.provideFactory(
+                                assistantRepository = container.assistantRepository
+                            )
+                        )
+                        com.example.somnus.ui.assistant.AssistantScreen(
+                            viewModel = assistantViewModel,
                             onNavigateBack = { backStack.removeLastOrNull() }
                         )
                     }

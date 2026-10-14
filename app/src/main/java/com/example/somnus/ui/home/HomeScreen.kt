@@ -15,12 +15,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
@@ -90,6 +92,7 @@ fun HomeScreen(
     onNavigateToActivity: () -> Unit = {},
     onNavigateToNutrition: () -> Unit = {},
     onNavigateToAnalytics: () -> Unit = {},
+    onNavigateToAssistant: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -119,7 +122,18 @@ fun HomeScreen(
         topBar = {
             SomnusTopBar(
                 title = "Somnus",
-                subtitle = "Unified Health Dashboard"
+                subtitle = "Unified Health Dashboard",
+                actions = {
+                    IconButton(
+                        onClick = onNavigateToAssistant
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "AI Assistant",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -220,6 +234,13 @@ fun HomeScreen(
                     item {
                         DashboardCoverageCard(coverage = coverage)
                     }
+                }
+
+                // 9. Somnus AI Assistant Entry Card
+                item {
+                    DashboardAssistantCard(
+                        onOpenAssistant = onNavigateToAssistant
+                    )
                 }
 
                 item {
@@ -1316,3 +1337,61 @@ fun ActiveSessionCard(
         }
     }
 }
+
+@Composable
+fun DashboardAssistantCard(
+    onOpenAssistant: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenAssistant)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Somnus AI Assistant",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Ask questions about your sleep, activity, and nutrition. 100% on-device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = "Open Assistant",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+

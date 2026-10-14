@@ -569,4 +569,117 @@ class SomnusDatabaseMigrationTest {
         dbV4.close()
         dbFile.delete()
     }
+
+    @Test
+    fun migration_5_to_6_creates_assistant_messages_table_and_preserves_existing_data() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbFile = File(context.cacheDir, "test_migration_5_6.db")
+        if (dbFile.exists()) dbFile.delete()
+
+        val configuration = androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name(dbFile.name)
+            .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(5) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `food_products` (
+                            `id` TEXT NOT NULL PRIMARY KEY,
+                            `barcode` TEXT NOT NULL,
+                            `barcodeFormat` TEXT NOT NULL,
+                            `name` TEXT NOT NULL,
+                            `brand` TEXT,
+                            `category` TEXT,
+                            `packageDescription` TEXT,
+                            `netQuantityValue` REAL,
+                            `netQuantityUnit` TEXT,
+                            `servingSize` REAL,
+                            `servingUnit` TEXT NOT NULL,
+                            `nutritionBasis` TEXT NOT NULL,
+                            `energyKcal` REAL NOT NULL,
+                            `proteinGrams` REAL,
+                            `carbohydratesGrams` REAL,
+                            `fatGrams` REAL,
+                            `source` TEXT NOT NULL,
+                            `lastVerifiedAt` INTEGER NOT NULL,
+                            `isUserModified` INTEGER NOT NULL,
+                            `completeness` TEXT NOT NULL
+                        )
+                        """.trimIndent()
+                    )
+                }
+
+                override fun onUpgrade(
+                    db: SupportSQLiteDatabase,
+                    oldVersion: Int,
+                    newVersion: Int
+                ) {}
+            })
+            .build()
+
+        val helper = FrameworkSQLiteOpenHelperFactory().create(configuration)
+        val dbV5 = helper.writableDatabase
+
+        // Insert existing data into v5 tables
+        dbV5.execSQL(
+            """
+            INSERT INTO food_products (
+                id, barcode, barcodeFormat, name, brand, category,
+                packageDescription, netQuantityValue, netQuantityUnit, servingSize, servingUnit,
+                nutritionBasis, energyKcal, proteinGrams, carbohydratesGrams, fatGrams,
+                source, lastVerifiedAt, isUserModified, completeness
+            ) VALUES (
+                'fp-v5', '8901030383748', 'EAN_13', 'Kissan Fresh Tomato Ketchup', 'Kissan', 'Condiments',
+                '1kg bottle', 1000.0, 'GRAMS', 15.0, 'GRAMS',
+                'PER_100_G', 130.0, 1.2, 31.0, 0.0,
+                'LOCAL_USER', 1700000000000, 0, 'COMPLETE'
+            )
+            """.trimIndent()
+        )
+
+        // Apply MIGRATION_5_6
+        SomnusDatabase.MIGRATION_5_6.migrate(dbV5)
+
+        // Verify existing v5 data is preserved
+        val fpCursor = dbV5.query("SELECT id, name, energyKcal FROM food_products WHERE id = 'fp-v5'")
+        assertTrue(fpCursor.moveToFirst())
+        assertEquals("fp-v5", fpCursor.getString(0))
+        assertEquals("Kissan Fresh Tomato Ketchup", fpCursor.getString(1))
+        assertEquals(130.0, fpCursor.getDouble(2), 0.01)
+        fpCursor.close()
+
+        // Insert and verify assistant_messages table
+        dbV5.execSQL(
+            """
+            INSERT INTO assistant_messages (
+                id, role, content, timestampEpochMs, wasLocalHandled,
+                inputTokens, outputTokens, latencyMs, intentType, referencesJson, isError
+            ) VALUES (
+                'msg-1', 'ASSISTANT', 'You slept 7 hours and 45 minutes.', 1700000000000,
+                1, 0, 0, 15, 'LATEST_SLEEP', '[]', 0
+            )
+            """.trimIndent()
+        )
+
+        val msgCursor = dbV5.query(
+            "SELECT id, role, content, intentType, wasLocalHandled, latencyMs FROM assistant_messages WHERE id = 'msg-1'"
+        )
+        assertTrue(msgCursor.moveToFirst())
+        assertEquals("msg-1", msgCursor.getString(0))
+        assertEquals("ASSISTANT", msgCursor.getString(1))
+        assertEquals("You slept 7 hours and 45 minutes.", msgCursor.getString(2))
+        assertEquals("LATEST_SLEEP", msgCursor.getString(3))
+        assertEquals(1, msgCursor.getInt(4))
+        assertEquals(15, msgCursor.getInt(5))
+        msgCursor.close()
+
+        // Verify index on timestampEpochMs exists
+        val indexCursor = dbV5.query(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'index_assistant_messages_timestampEpochMs'"
+        )
+        assertTrue("Expected index_assistant_messages_timestampEpochMs to exist", indexCursor.moveToFirst())
+        indexCursor.close()
+
+        dbV5.close()
+        dbFile.delete()
+    }
 }

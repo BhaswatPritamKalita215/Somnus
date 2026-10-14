@@ -39,6 +39,7 @@ interface AppContainer {
     val foodProductRepository: com.example.somnus.data.repository.FoodProductRepository
     val foodLogRepository: com.example.somnus.data.repository.FoodLogRepository
     val dashboardRepository: com.example.somnus.data.repository.DashboardRepository
+    val assistantRepository: com.example.somnus.data.repository.AssistantRepository
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -129,6 +130,47 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             userPreferencesRepository = userPreferencesRepository,
             sessionManager = sessionManager,
             healthConnectManager = healthConnectManager
+        )
+    }
+
+    val assistantCache: com.example.somnus.domain.assistant.AssistantCache by lazy {
+        com.example.somnus.domain.assistant.AssistantCache()
+    }
+
+    val localDataQueryService: com.example.somnus.domain.assistant.LocalDataQueryService by lazy {
+        com.example.somnus.domain.assistant.LocalDataQueryService(
+            sleepSessionRepository = sleepSessionRepository,
+            solRepository = solRepository,
+            stepRepository = stepRepository,
+            foodLogRepository = foodLogRepository,
+            dashboardRepository = dashboardRepository,
+            userPreferencesRepository = userPreferencesRepository,
+            healthConnectManager = healthConnectManager
+        )
+    }
+
+    val assistantContextBuilder: com.example.somnus.domain.assistant.ContextBuilder by lazy {
+        com.example.somnus.domain.assistant.ContextBuilder(
+            sleepSessionRepository = sleepSessionRepository,
+            solRepository = solRepository,
+            stepRepository = stepRepository,
+            foodLogRepository = foodLogRepository,
+            dashboardRepository = dashboardRepository,
+            userPreferencesRepository = userPreferencesRepository
+        )
+    }
+
+    val assistantModelProvider: com.example.somnus.domain.assistant.AssistantModelProvider by lazy {
+        com.example.somnus.domain.assistant.DeterministicLocalAssistantModelProvider()
+    }
+
+    override val assistantRepository: com.example.somnus.data.repository.AssistantRepository by lazy {
+        com.example.somnus.data.repository.AssistantRepositoryImpl(
+            dao = database.assistantMessageDao(),
+            localDataQueryService = localDataQueryService,
+            contextBuilder = assistantContextBuilder,
+            modelProvider = assistantModelProvider,
+            assistantCache = assistantCache
         )
     }
 }

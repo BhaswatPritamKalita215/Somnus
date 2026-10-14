@@ -1,17 +1,18 @@
-# Somnus — Native Android Sleep Tracker (Milestones 1–8)
+# Somnus — Native Android Sleep Tracker (Milestones 1–9)
 
-**Somnus** is a local-first, privacy-focused native Android sleep, activity, and nutrition-tracking application built with Kotlin and Jetpack Compose. Somnus prioritizes detailed records, measurable accuracy, transparent uncertainty, battery efficiency, and zero telemetry.
+**Somnus** is a local-first, privacy-focused native Android sleep, activity, and nutrition-tracking application built with Kotlin and Jetpack Compose. Somnus prioritizes detailed records, measurable accuracy, transparent uncertainty, battery efficiency, zero telemetry, and token-optimized on-device AI assistance.
 
 ---
 
 ## 1. Product Philosophy & Scientific Honesty
 
-- **Local-Only Architecture**: All data is stored strictly in a local SQLite database using Android Room. Somnus contains **no cloud backend, no remote database, no user accounts, no telemetry, no analytics SDKs, and no advertising services**. Your sleep and step data never leaves your physical device.
+- **Local-Only Architecture**: All data is stored strictly in a local SQLite database using Android Room. Somnus contains **no cloud backend, no remote database, no user accounts, no telemetry, no analytics SDKs, and no advertising services**. Your sleep, step, nutrition, and conversation data never leaves your physical device.
 - **Scientific Honesty**:
   - Sleep tracking distinguishes **Time in Bed (TIB)** from physiological sleep onset. Somnus does **not** invent heart-rate, HRV, respiratory rate, or sleep-stage values (light, deep, REM) that have not been collected.
   - Consumer wearables and phone accelerometers approximate sleep onset from physical stillness; phone motion alone does not identify physiological sleep onset with clinical accuracy.
   - Sourced observations are strictly segregated: Wearable imports and algorithmic estimates are preserved in parallel with self-reported values and **never overwrite** self-reported metrics.
   - **Step Tracking & Activity**: Somnus reconciles steps intelligently without blind summation. Wearable on-body steps and phone sensor steps for overlapping intervals are deduplicated to avoid false double-counting, while non-overlapping intervals (e.g. phone steps while watch was charging) are combined.
+  - **AI Assistant**: Factual health inquiries (e.g., steps, sleep duration, calorie intake) are routed to deterministic Room queries ($0$ tokens) rather than non-deterministic model generation, guaranteeing $100\%$ numerical accuracy without hallucination or token waste.
 - **PSQI Copyright & Instrument Compliance**:
   - The 19-item Pittsburgh Sleep Quality Index is a copyrighted instrument belonging to the University of Pittsburgh (Buysse et al., 1989).
   - Somnus does **not** ship a fabricated or unauthorized reproduction of the questionnaire. Instead, it provides the pure Kotlin scoring engine, persistent schema, and a synthetic verification test runner. When authorized questionnaire licensing is configured, the instrument plugs into the existing architecture.
@@ -26,12 +27,13 @@
 - **UI Toolkit**: Jetpack Compose with Material 3
 - **Design Identity**: Dark-first, restrained midnight-blue theme (`#080C16` obsidian background, `#82AAFF` astral blue primary, `#56CFE1` moonlight teal secondary) with full support for light mode
 - **Architecture**: MVVM with repository interfaces and constructor injection (`AppContainer`)
-- **Persistence**: Android Room (SQLite) with explicit migration management (`SomnusDatabase` version 4 with `MIGRATION_3_4`) and enforced foreign keys (`PRAGMA foreign_keys = ON;`)
+- **Persistence**: Android Room (SQLite) with explicit migration management (`SomnusDatabase` version 6 with `MIGRATION_5_6`) and enforced foreign keys (`PRAGMA foreign_keys = ON;`)
 - **Barcode & Camera**: CameraX 1.4.1 and Google ML Kit Barcode Scanning 17.3.0 for on-device food barcode scanning
 - **Remote Product Catalog**: Open Food Facts API v2 (ODbL) with pure JSON parsing and offline caching
+- **On-Device AI Assistant**: Deterministic zero-token intent routing, domain-selective context pruning ($\le 1,000$ input tokens, $\le 200$ output tokens), SHA-256 caching with reactive invalidation, safety guardrails, and developer diagnostics
 - **Preferences**: Jetpack DataStore Preferences
 - **Asynchronous Concurrency**: Kotlin Coroutines and reactive `StateFlow`
-- **Testing**: JUnit 4, Kotlin Coroutines Test, Robolectric, AndroidX Arch Core Testing (150+ passing tests)
+- **Testing**: JUnit 4, Kotlin Coroutines Test, Robolectric, AndroidX Arch Core Testing (235 passing tests)
 
 ---
 
@@ -317,6 +319,12 @@ The test suite contains **181 automated tests** across domain logic, scoring eng
 30. `IndianPackagedFoodTest`: Real Indian packaged food profiles across categories (Parle-G, Maggi Noodles, Haldiram's Aloo Bhujia, Amul Butter, Kurkure, Cadbury Dairy Milk, ₹5 EAN-8 sachet, imported Swiss Toblerone), package-level vs 100g math, and FSSAI salt vs sodium chemical separation.
 31. `CrossMetricInsightEngineTest`: Activity vs sleep duration median split mathematics, circular bedtime shift statistics, energy balance comparisons with honesty caveats, minimum sample size suppression ($N < 3$), and causation refusal guarantees.
 32. `DashboardRepositoryTest`: Multi-domain reactive joining, clinical sleep date alignment preventing midnight double-counting, partial day data handling, and 7-day data coverage scoring across completeness tiers.
+33. `IntentRouterTest`: Intent classification (greetings, latest sleep, today steps, nutrition, energy burn, cross-metric correlations, missing data, general inquiries) and token-free routing verification.
+34. `AssistantSafetyPolicyTest`: Medical diagnosis refusal, medication/dosage safety checks, extreme caloric restriction prevention, and causal claim rewrites to statistical correlation.
+35. `AssistantCacheTest`: Content-addressed SHA-256 caching, 5-minute TTL expiration, reactive domain-level cache invalidation on new entries, and cache hit/miss accounting.
+36. `ContextBuilderTest`: Domain-selective prompt context assembly, Kotlin-computed arithmetic (averages, totals, deltas), conversation turn pruning, and hard token budget enforcement ($\le 1,000$ tokens).
+37. `AssistantViewModelTest`: Jetpack Compose UI state flow emissions, input text length bounds (500 chars), cancellation handling, dialog visibility, and conversation clearing.
+38. `AssistantRepositoryTest`: End-to-end repository orchestration, deterministic 0-token fallback execution, token usage tracking, and multi-domain data query aggregation.
 
 ---
 
@@ -348,14 +356,51 @@ Pure domain statistical engine evaluating cross-domain relationships:
 
 ---
 
-## 9. Physical Device Validation Protocol
+## 9. Milestone 9: Token-Optimized AI Assistant
+
+Milestone 9 introduces a local-first, token-budgeted AI assistant designed to help users explore and understand their sleep, steps, activity, and nutrition records with zero cloud dependency.
+
+### Core Architecture & Privacy Invariants
+- **100% Offline & Private**: No prompts, health observations, or conversation turns ever leave the physical device. Zero external cloud APIs, zero analytics, zero telemetry.
+- **Deterministic 0-Token Intent Routing (`IntentRouter`)**:
+  - Factual questions (e.g., *"How did I sleep last night?"*, *"How many steps today?"*, *"Show my calorie intake"*, *"What data is missing?"*) are recognized via regex-based pattern matching and routed directly to Room and Health Connect queries.
+  - Generates responses with **0 model tokens** and **100% numerical accuracy**, eliminating hallucination of health statistics.
+- **Domain-Selective Context Pruning (`ContextBuilder`)**:
+  - Dynamically extracts only the specific domain required by the user's inquiry (e.g. sleep-only, steps-only, or multi-domain correlation).
+  - Pre-computes arithmetic in pure Kotlin (averages, totals, deltas, percentages) rather than prompting the model to perform raw arithmetic.
+  - Conversation history is pruned to the most recent 2–3 turns to prevent unbounded context growth.
+  - Hard input context constraint: bounded strictly to $\le 1,000$ tokens. Output target is bounded to 80–150 words ($\le 120$–$200$ tokens).
+- **Pluggable On-Device Model Provider (`AssistantModelProvider`)**:
+  - Clean repository abstraction with `DeterministicLocalAssistantModelProvider`: a built-in offline synthesizer that generates coherent, structured, token-budgeted responses with 0 MB APK bloat.
+  - Ready for on-device inference engines (such as Gemini Nano via AICore or MLC-LLM) through the common `AssistantModelProvider` interface.
+- **Multi-Level Caching (`AssistantCache`)**:
+  - SHA-256 content-addressed keys combining normalized prompt and domain context hash.
+  - 5-minute Time-To-Live (TTL) with reactive invalidation when new records are logged in Room.
+  - Detailed cache telemetry tracking hits, misses, and saved tokens.
+- **Safety Policy & Guardrails (`AssistantSafetyPolicy`)**:
+  - **Medical Disclaimers**: Automatically appends non-diagnostic health disclaimers.
+  - **Medical Diagnoses**: Rejects requests to diagnose conditions (e.g. insomnia, sleep apnea).
+  - **Medication & Supplements**: Explicitly refuses medication and dosage advice, recommending consultation with a medical professional.
+  - **Extreme Diets**: Flags and rejects dangerous caloric deficits ($< 1,000$ kcal/day).
+  - **Causal Claims**: Rewrites causal assertions (*"X caused Y"*) to statistical correlation (*"X is associated with Y"*).
+- **Material 3 Assistant Screen & Chat UI**:
+  - Accessible via top bar action on Home and a dedicated card on the dashboard.
+  - Quick-start suggestion chips (*"How did I sleep last night?"*, *"How many steps today?"*, etc.).
+  - Message bubbles featuring clear provenance badges: **"Local Logic (0 tokens)"** vs **"On-Device AI"**.
+  - Verified data reference chips linking directly to the underlying recorded metrics.
+  - Active generation cancellation button and clear conversation confirmation dialog.
+  - Developer Diagnostics Bottom Sheet displaying live token counts (input/output), total session tokens, cache hit rate, response latency, and active model provider.
+
+---
+
+## 10. Physical Device Validation Protocol
 
 - [Physical Device Validation Protocol](docs/VALIDATION_PROTOCOL.md) — Standardized testing protocol covering process death survival, stale session recovery, overlapping collision rejection, Health Connect sync, phone sensor tracking, and battery drain profiling.
 - [Validation & Engineering Report](docs/VALIDATION_REPORT.md) — Comprehensive technical report covering codebase audit, prioritized defects, three-tier validation framework, and scientific honesty guarantees.
 
 ---
 
-## 9. Building the Application
+## 11. Building the Application
 
 Build the debug APK:
 ```powershell
