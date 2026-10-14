@@ -1,4 +1,4 @@
-# Somnus — Native Android Sleep Tracker (Milestones 1–7)
+# Somnus — Native Android Sleep Tracker (Milestones 1–8)
 
 **Somnus** is a local-first, privacy-focused native Android sleep, activity, and nutrition-tracking application built with Kotlin and Jetpack Compose. Somnus prioritizes detailed records, measurable accuracy, transparent uncertainty, battery efficiency, and zero telemetry.
 
@@ -315,10 +315,40 @@ The test suite contains **181 automated tests** across domain logic, scoring eng
 28. `NutritionViewModelTest`: UI StateFlow emissions, barcode scanner state machine, portion adjustment, manual food entry, and calorie target updates.
 29. `BarcodeValidatorTest`: Leading-zero preservation (UPC-A, EAN-8), Modulo-10 GS1 check digit verification, GS1 India 890 prefix detection, and format inference without national discrimination.
 30. `IndianPackagedFoodTest`: Real Indian packaged food profiles across categories (Parle-G, Maggi Noodles, Haldiram's Aloo Bhujia, Amul Butter, Kurkure, Cadbury Dairy Milk, ₹5 EAN-8 sachet, imported Swiss Toblerone), package-level vs 100g math, and FSSAI salt vs sodium chemical separation.
+31. `CrossMetricInsightEngineTest`: Activity vs sleep duration median split mathematics, circular bedtime shift statistics, energy balance comparisons with honesty caveats, minimum sample size suppression ($N < 3$), and causation refusal guarantees.
+32. `DashboardRepositoryTest`: Multi-domain reactive joining, clinical sleep date alignment preventing midnight double-counting, partial day data handling, and 7-day data coverage scoring across completeness tiers.
 
 ---
 
-## 8. Milestone 5 Engineering & Validation Documentation
+## 8. Milestone 8: Unified Health Dashboard & Cross-Metric Insights
+
+Milestone 8 unifies Somnus's sleep, activity, and nutrition domains into a single health dashboard:
+
+### 1. Unified Daily Dashboard
+- **Date Navigation**: Seamless day stepping and calendar date selection. Overnight sleep crossing midnight is mapped to the clinical sleep opportunity date, ensuring consistent alignment with steps and meals.
+- **Sleep Section**: Latest overnight sleep record with duration, measurement qualification badge (manual time-in-bed vs. phone sensor estimate vs. wearable import), bedtime/wake times, and integrated SOL and PSQI summaries.
+- **Activity Section**: Reconciled daily step totals, progress bar against user goal, source provenance badge, and quick navigation to the Activity screen.
+- **Nutrition Section**: Logged dietary energy (kcal), calorie target progress, meal-by-meal breakdown (Breakfast, Lunch, Dinner, Snack), and macronutrient distribution (carbs, protein, fat).
+- **Energy Expenditure Section**: Active calories burned (physical movement) vs. total calories burned (active + BMR) from Health Connect with honest missing-data handling (never conflating unrecorded periods with zero calories).
+
+### 2. Cross-Metric Analytical Insights Engine
+Pure domain statistical engine evaluating cross-domain relationships:
+- **Activity vs. Sleep Duration**: Compares sleep duration on higher-activity days vs. lower-activity days using a median step split.
+- **Activity vs. Bedtime Schedule**: Evaluates bedtime consistency and schedule shifts between active and inactive days using circular statistics.
+- **Energy Balance**: Compares logged dietary intake against recorded energy expenditure, explicitly noting that unlogged meals underestimate intake and unmeasured BMR is excluded.
+- **7-Day Multi-Metric Trends**: Compares rolling 7-day sleep duration and physical activity trajectories against the preceding week.
+- **Scientific Honesty Invariants**:
+  - **Association $\neq$ Causation**: Insights explicitly describe statistical associations in recorded data and strictly refuse to claim causal links.
+  - **Minimum Thresholds**: Requires at least 3 paired days before drawing conclusions; displays transparent collection progress indicators when observations are insufficient.
+  - **Zero Fabrication**: Insights only evaluate persisted records from Room and Health Connect.
+
+### 3. Multi-Domain Data Coverage Tracking
+- Evaluates data completeness over a 7-day inspection window across 4 domains (Sleep, Steps, Nutrition, Energy).
+- Classifies coverage into transparent completeness tiers: **Comprehensive** ($\ge 75\%$), **Moderate** ($\ge 50\%$), **Sparse** ($\ge 25\%$), and **Minimal** ($< 25\%$).
+
+---
+
+## 9. Physical Device Validation Protocol
 
 - [Physical Device Validation Protocol](docs/VALIDATION_PROTOCOL.md) — Standardized testing protocol covering process death survival, stale session recovery, overlapping collision rejection, Health Connect sync, phone sensor tracking, and battery drain profiling.
 - [Validation & Engineering Report](docs/VALIDATION_REPORT.md) — Comprehensive technical report covering codebase audit, prioritized defects, three-tier validation framework, and scientific honesty guarantees.

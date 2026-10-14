@@ -38,6 +38,7 @@ interface AppContainer {
     val phoneStepTracker: PhoneStepTracker
     val foodProductRepository: com.example.somnus.data.repository.FoodProductRepository
     val foodLogRepository: com.example.somnus.data.repository.FoodLogRepository
+    val dashboardRepository: com.example.somnus.data.repository.DashboardRepository
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -115,6 +116,19 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     override val foodLogRepository: com.example.somnus.data.repository.FoodLogRepository by lazy {
         com.example.somnus.data.repository.FoodLogRepositoryImpl(
             foodLogDao = database.foodLogDao()
+        )
+    }
+
+    override val dashboardRepository: com.example.somnus.data.repository.DashboardRepository by lazy {
+        com.example.somnus.data.repository.DashboardRepositoryImpl(
+            sleepSessionRepository = sleepSessionRepository,
+            solRepository = solRepository,
+            psqiRepository = psqiRepository,
+            stepRepository = stepRepository,
+            foodLogRepository = foodLogRepository,
+            userPreferencesRepository = userPreferencesRepository,
+            sessionManager = sessionManager,
+            healthConnectManager = healthConnectManager
         )
     }
 }

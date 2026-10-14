@@ -154,13 +154,18 @@ fun SomnusApp() {
                         val homeViewModel: HomeViewModel = viewModel(
                             factory = HomeViewModel.provideFactory(
                                 sessionManager = container.sessionManager,
-                                repository = container.sleepSessionRepository
+                                repository = container.sleepSessionRepository,
+                                dashboardRepository = container.dashboardRepository,
+                                healthConnectManager = container.healthConnectManager
                             )
                         )
                         HomeScreen(
                             viewModel = homeViewModel,
                             onNavigateToHistory = { navigateTo(Screen.History) },
-                            onNavigateToDetail = { sessionId -> navigateTo(Screen.Detail(sessionId)) }
+                            onNavigateToDetail = { sessionId -> navigateTo(Screen.Detail(sessionId)) },
+                            onNavigateToActivity = { navigateTo(Screen.Activity) },
+                            onNavigateToNutrition = { navigateTo(Screen.Nutrition) },
+                            onNavigateToAnalytics = { navigateTo(Screen.Analytics) }
                         )
                     }
 
