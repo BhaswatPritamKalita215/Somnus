@@ -87,6 +87,9 @@ dependencies {
   // DataStore
   implementation(libs.androidx.datastore.preferences)
 
+  // Health Connect
+  implementation(libs.androidx.health.connect)
+
   // Local tests: jUnit, coroutines, Room testing, Robolectric
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)

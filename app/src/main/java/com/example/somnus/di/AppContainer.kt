@@ -6,6 +6,8 @@ import com.example.somnus.data.preferences.UserPreferencesRepository
 import com.example.somnus.data.preferences.dataStore
 import com.example.somnus.data.repository.PsqiRepository
 import com.example.somnus.data.repository.PsqiRepositoryImpl
+import com.example.somnus.data.repository.SleepAnalyticsRepository
+import com.example.somnus.data.repository.SleepAnalyticsRepositoryImpl
 import com.example.somnus.data.repository.SleepSessionRepository
 import com.example.somnus.data.repository.SleepSessionRepositoryImpl
 import com.example.somnus.data.repository.SolRepository
@@ -20,6 +22,7 @@ interface AppContainer {
     val sleepSessionRepository: SleepSessionRepository
     val solRepository: SolRepository
     val psqiRepository: PsqiRepository
+    val sleepAnalyticsRepository: SleepAnalyticsRepository
     val userPreferencesRepository: UserPreferencesRepository
     val sessionManager: SessionManager
 }
@@ -40,6 +43,14 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val psqiRepository: PsqiRepository by lazy {
         PsqiRepositoryImpl(database.psqiDao())
+    }
+
+    override val sleepAnalyticsRepository: SleepAnalyticsRepository by lazy {
+        SleepAnalyticsRepositoryImpl(
+            sessionRepository = sleepSessionRepository,
+            solRepository = solRepository,
+            psqiRepository = psqiRepository
+        )
     }
 
     override val userPreferencesRepository: UserPreferencesRepository by lazy {

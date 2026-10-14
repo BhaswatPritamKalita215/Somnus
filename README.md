@@ -1,4 +1,4 @@
-# Somnus — Native Android Sleep Tracker (Milestone 1 + SOL & PSQI Extension)
+# Somnus — Native Android Sleep Tracker (Milestones 1–4)
 
 **Somnus** is a local-first, privacy-focused native Android sleep-tracking application built with Kotlin and Jetpack Compose. Somnus prioritizes detailed sleep records, measurable accuracy, transparent uncertainty, battery efficiency, and zero telemetry.
 
@@ -28,7 +28,7 @@
 - **Persistence**: Android Room (SQLite) with explicit migration management (`SomnusDatabase` version 2)
 - **Preferences**: Jetpack DataStore Preferences
 - **Asynchronous Concurrency**: Kotlin Coroutines and reactive `StateFlow`
-- **Testing**: JUnit 4, Kotlin Coroutines Test, Robolectric, AndroidX Arch Core Testing (72 passing tests)
+- **Testing**: JUnit 4, Kotlin Coroutines Test, Robolectric, AndroidX Arch Core Testing (99 passing tests)
 
 ---
 
@@ -60,11 +60,18 @@ com.example.somnus/
 │   │   ├── SolRecord.kt             # SOL record, measurement methods & quality flags
 │   │   ├── PsqiModels.kt            # PSQI responses, 7 component scores & global score
 │   │   └── SyntheticPsqiFixtures.kt # Standard synthetic verification fixtures
-│   └── analysis/
-│       ├── DurationCalculator.kt    # Instant-based duration math, formatting, DST safety
-│       ├── SessionValidator.kt      # Strict validation rules for session intervals
-│       ├── SolCalculator.kt         # SOL duration, sanity checks, weekly/monthly summaries
-│       └── PsqiScoringEngine.kt     # Pure Kotlin Buysse (1989) PSQI scoring engine
+│   ├── analysis/
+│   │   ├── DurationCalculator.kt    # Instant-based duration math, formatting, DST safety
+│   │   ├── SessionValidator.kt      # Strict validation rules for session intervals
+│   │   ├── SolCalculator.kt         # SOL duration, sanity checks, weekly/monthly summaries
+│   │   └── PsqiScoringEngine.kt     # Pure Kotlin Buysse (1989) PSQI scoring engine
+│   └── analytics/
+│       ├── CircularTimeCalculator.kt # Vector circular mean and circular standard deviation
+│       ├── SleepAnalyticsModels.kt   # Day summaries, period metrics, comparisons, insights
+│       ├── SleepMetricsCalculator.kt # Interval merging, nap handling, clinical sleep-day
+│       ├── SleepTrendAnalyzer.kt     # Baseline comparison with reliability qualification
+│       ├── SleepDataQualityAnalyzer.kt # Coverage scoring, missing/conflicted night tracking
+│       └── SleepInsightEngine.kt     # Deterministic rules-based insight generation
 ├── data/
 │   ├── local/
 │   │   ├── SleepSessionEntity.kt    # Room entity for sleep sessions
@@ -77,7 +84,9 @@ com.example.somnus/
 │   ├── repository/
 │   │   ├── SleepSessionRepository.kt# Session repository interface & impl
 │   │   ├── SolRepository.kt         # SOL repository interface & impl
-│   │   └── PsqiRepository.kt        # PSQI repository interface & impl
+│   │   ├── PsqiRepository.kt        # PSQI repository interface & impl
+│   │   ├── SleepAnalyticsRepository.kt # Analytics repository interface
+│   │   └── SleepAnalyticsRepositoryImpl.kt # Reactive flow aggregator on Dispatchers.IO
 │   └── preferences/
 │       └── UserPreferencesRepository.kt # DataStore preferences (theme mode)
 ├── session/
@@ -87,7 +96,7 @@ com.example.somnus/
 │   ├── Theme.kt                     # Material 3 theme composable
 │   └── Type.kt                      # Clean typography styles
 └── ui/
-    ├── SomnusApp.kt                 # Root navigation, bottom navigation bar (4 tabs)
+    ├── SomnusApp.kt                 # Root navigation, bottom navigation bar (5 tabs)
     ├── components/
     │   └── CommonComponents.kt      # TopBar, ScientificHonestyBadge, ConfirmDialog
     ├── home/
@@ -99,9 +108,15 @@ com.example.somnus/
     ├── detail/
     │   ├── SessionDetailScreen.kt   # Timestamp breakdown, time correction dialog
     │   └── SessionDetailViewModel.kt# Detail ViewModel
+    ├── analytics/
+    │   ├── AnalyticsScreen.kt       # Milestone 4 Dashboard host & date range selector
+    │   ├── AnalyticsViewModel.kt    # Reactive StateFlow emissions & date range filter
+    │   └── components/
+    │       ├── AnalyticsCharts.kt   # Canvas duration trend & schedule consistency charts
+    │       └── AnalyticsCards.kt    # Overview, comparison, data quality, and insight cards
     ├── insights/
-    │   ├── InsightsScreen.kt        # Insights tab host (SOL, PSQI, Comparison)
-    │   ├── InsightsViewModel.kt     # Insights state management & actions
+    │   ├── InsightsScreen.kt        # Instruments tab host (SOL & PSQI)
+    │   ├── InsightsViewModel.kt     # Instruments state management & actions
     │   ├── SolSection.kt            # Nightly SOL cards, aggregates, entry dialog
     │   ├── SolTrendChart.kt         # Custom Canvas trend chart with 30m reference line
     │   ├── PsqiSection.kt           # PSQI component breakdown, synthetic runner, custom dialog
@@ -113,7 +128,63 @@ com.example.somnus/
 
 ---
 
-## 5. Functional Capabilities
+## 5. Milestone 4: Sleep Analytics, Trends & Personalized Insights
+
+Milestone 4 introduces a dedicated, testable domain analytics engine and an interactive Jetpack Compose dashboard.
+
+### Core Sleep Analytics & Statistics
+1. **Clinical Sleep Date Attribution**:
+   - Overnight sessions crossing midnight or beginning between 00:00 and 06:00 are attributed to the clinical sleep opportunity of the preceding calendar evening.
+2. **Interval Merging (Zero Double-Counting)**:
+   - When multiple sources overlap on the same night (e.g. user manual log plus wearable Health Connect import), intervals $[s_i, e_i]$ are sorted and merged. Overlapping minutes are never double-counted.
+3. **Circular Statistics Across Midnight**:
+   - Conventional arithmetic averaging of wall-clock times fails across midnight (e.g. averaging 23:30 and 00:30 yields 12:00 noon).
+   - Somnus uses unit vector averaging:
+     $$\theta_i = \frac{\text{minute}_i}{1440} \times 2\pi, \quad \bar{C} = \frac{1}{N}\sum\cos\theta_i, \quad \bar{S} = \frac{1}{N}\sum\sin\theta_i$$
+     $$\bar{\theta} = \operatorname{atan2}(\bar{S}, \bar{C})$$
+     giving 00:00 midnight with mathematical precision.
+4. **Circular Schedule Variability**:
+   - Circular standard deviation:
+     $$s = \sqrt{-2\ln R} \times \frac{1440}{2\pi}$$
+     where $R = \sqrt{\bar{C}^2 + \bar{S}^2}$.
+   - Measures day-to-day bedtime and wake-time dispersion (high consistency: $s < 30$ min; variable: $s \ge 60$ min).
+
+### Date Range Filtering & Baseline Comparisons
+- **Filtering Options**: Presets for Last 7 Days, Last 30 Days, Last 90 Days, and Custom ranges.
+- **Period Comparison Engine**:
+  - Compares current period against an immediately preceding baseline period of identical duration.
+  - Computes absolute differences and percentage changes.
+  - **Scientific Qualification**: Requires at least 3 valid nights in both periods and an equivalence ratio $\ge 0.5$. Unqualified comparisons are explicitly flagged as preliminary rather than presenting false statistical confidence.
+
+### Observational Honesty & Provenance
+- **Tracking Quality Scoring**:
+  - `EXCELLENT`: $\ge 80\%$ coverage
+  - `ADEQUATE`: $50\% - 79\%$ coverage
+  - `SPARSE`: $25\% - 49\%$ coverage
+  - `INSUFFICIENT`: $< 25\%$ coverage or $< 2$ nights
+- **Missing Data Reporting**: Exact missing night counts and dates are surfaced without judgmental phrasing.
+- **Conflicted Overlaps**: Days with multiple overlapping sources are highlighted with full source breakdown (Manual, Phone Estimate, Wearable Import).
+- **Physiological Biomarker Placeholders**: Heart rate, HRV, SpO₂, and respiratory rate are charted only when actual records exist from wearable hardware, with explicit gap states.
+
+### Deterministic Rules-Based Insight Engine
+- **100% On-Device**: Generated entirely in Kotlin without remote cloud services, telemetry, or external AI models.
+- **Traceable Observations**:
+  - Sleep duration insights (shorter vs longer than baseline, short sleep warnings).
+  - Bedtime consistency insights (regular vs shifting schedules).
+  - Sleep Onset Latency (prolonged latency $> 30$ min).
+  - Subjective vs objective comparison incorporating monthly PSQI global scores.
+- **Evidence Rating**: Every insight displays an evidence level (`ROBUST`, `MODERATE`, `PRELIMINARY`).
+- **Non-Diagnostic Language**: Adheres strictly to scientific limitations without claiming medical diagnostic capability.
+
+### Interactive Compose Analytics Dashboard
+- **Overview Metrics Grid**: Mean actual sleep, bedtime/wake-time circular averages, duration variability, and average SOL.
+- **Custom Canvas Duration Trend Chart**: Plots daily durations against an average benchmark dashed reference line, distinguishing recorded nights from missing night baseline indicators.
+- **Custom Canvas Schedule Consistency Chart**: Visualizes day-to-day bedtime and wake-time intervals crossing midnight with connecting lines and color-coded nodes.
+- **Selected Day Inspector Card**: Interactive drill-down card displaying actual sleep, time in bed, bedtime, wake time, latency, sources, and session count for any selected night.
+
+---
+
+## 6. Functional Capabilities (Milestones 1–3)
 
 ### Track & Active Session
 - **Somnus Tracking Card**: Shows current status (Ready to Track vs. Session in Progress).
@@ -151,11 +222,6 @@ com.example.somnus/
   - Component scores strictly 0–3; Global score strictly 0–21.
 - **Synthetic Test Runner**: One-tap execution of validated fixtures (`Optimal Sleep (0)`, `Moderate Disturbance (8)`, `Maximal Severity (21)`, `Incomplete Rejection`) or custom numerical parameter entry.
 
-### Combined Multiscale Analysis
-- **Micro vs. Macro Timescales**: Explains how nightly SOL (physiological micro-metric) complements monthly PSQI (psychometric macro-instrument).
-- **Educational Distinction**: Clarifies why the application never substitutes arithmetic mean nightly SOL for PSQI Component 2, maintaining clinical validity.
-- **Transparency on Sourced Divergence**: Explains differences between objective sensor estimates and subjective sleep state perception.
-
 ### Settings & Data Sovereignty
 - **Diagnostics**: Real-time record counts for Sessions, SOL records, and PSQI assessments, alongside Room database schema version.
 - **Appearance**: Seamless switching between Dark (Default), System, and Light themes via DataStore.
@@ -163,29 +229,34 @@ com.example.somnus/
 
 ---
 
-## 6. Verification & Test Suite
+## 7. Verification & Test Suite
 
-The test suite contains **72 automated tests** across domain logic, scoring engines, database DAOs, migrations, and ViewModels. All pass with 100% success rate:
+The test suite contains **99 automated tests** across domain logic, scoring engines, database DAOs, migrations, analytics calculators, and ViewModels. All pass with 100% success rate:
 
 ```powershell
 .\gradlew.bat test
 ```
 
-Test coverage includes:
-1. `DurationCalculatorTest`: Instant arithmetic, DST transitions, midnight crossings, duration formatting.
-2. `SessionValidatorTest`: Start/end order, negative duration rejection, 24-hour limit, future instant rejection.
-3. `SolCalculatorTest`: Latency minutes calculation, midnight crossing, onset before attempt rejection, quality flag evaluation, mean/median/range summaries.
-4. `PsqiScoringEngineTest`: All 7 components, exact cutoffs, efficiency percentages, synthetic fixtures (0, 8, 21), incomplete item rejection.
-5. `SleepSessionDaoTest`: Session insertion, query, active session status, atomic completion, updates.
-6. `SolDaoTest`: Record persistence, date range queries, session foreign key cascade.
-7. `PsqiDaoTest`: Assessment persistence, latest completed query, JSON responses serialization roundtrip.
-8. `SomnusDatabaseMigrationTest`: Verifies `MIGRATION_1_2` successfully adds `sol_records` and `psqi_assessments` without losing existing version 1 sleep sessions.
-9. `SessionManagerTest`: Active tracking lifecycle, start/end session handling, process restart survival.
-10. `HomeViewModelTest`, `HistoryViewModelTest`, `SessionDetailViewModelTest`, `SettingsViewModelTest`, `InsightsViewModelTest`: Complete StateFlow emissions and user mutation flows.
+### Complete Test Coverage
+1. `CircularTimeCalculatorTest`: Midnight crossing (23:30 + 00:30 $\to$ 00:00 midnight), circular dispersion, precision rounding, and consistency ratings.
+2. `SleepMetricsCalculatorTest`: Clinical sleep date assignment, overlapping interval deduplication, daytime nap vs overnight separation, and period metrics.
+3. `SleepTrendAnalyzerTest`: Period comparison, duration difference, percentage change, schedule shifts, and reliability qualification thresholds.
+4. `SleepDataQualityAnalyzerTest`: Coverage ratio calculation, quality tier classification (EXCELLENT, ADEQUATE, SPARSE, INSUFFICIENT), missing dates, and conflicted nights.
+5. `SleepInsightEngineTest`: Deterministic insight generation, baseline building suppression, duration warnings, consistency insights, SOL insights, and PSQI integration.
+6. `SleepAnalyticsRepositoryTest`: Reactive Flow aggregation across Room sessions, SOL records, and PSQI assessments on `Dispatchers.IO`.
+7. `AnalyticsViewModelTest`: UI StateFlow emissions, date range preset switching (7d, 30d, 90d), custom date ranges, and interactive day selection.
+8. `DurationCalculatorTest`: Instant arithmetic, DST transitions, midnight crossings, duration formatting.
+9. `SessionValidatorTest`: Start/end order, negative duration rejection, 24-hour limit, future instant rejection.
+10. `SolCalculatorTest`: Latency minutes calculation, midnight crossing, onset before attempt rejection, quality flag evaluation, mean/median/range summaries.
+11. `PsqiScoringEngineTest`: All 7 components, exact cutoffs, efficiency percentages, synthetic fixtures (0, 8, 21), incomplete item rejection.
+12. `SleepSessionDaoTest`, `SolDaoTest`, `PsqiDaoTest`: Room persistence, queries, updates, deletes, and foreign key cascades.
+13. `SomnusDatabaseMigrationTest`: Migration verification from v1 to v2.
+14. `SessionManagerTest`: Active tracking lifecycle, process restart survival.
+15. `HomeViewModelTest`, `HistoryViewModelTest`, `SessionDetailViewModelTest`, `SettingsViewModelTest`, `InsightsViewModelTest`: Complete StateFlow emissions and user mutation flows.
 
 ---
 
-## 7. Building the Application
+## 8. Building the Application
 
 Build the debug APK:
 ```powershell
