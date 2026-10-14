@@ -19,9 +19,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [
         SleepSessionEntity::class,
         SolRecordEntity::class,
-        PsqiAssessmentEntity::class
+        PsqiAssessmentEntity::class,
+        StepRecordEntity::class,
+        StepCounterCheckpointEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class SomnusDatabase : RoomDatabase() {
@@ -29,13 +31,17 @@ abstract class SomnusDatabase : RoomDatabase() {
     abstract fun sleepSessionDao(): SleepSessionDao
     abstract fun solRecordDao(): SolRecordDao
     abstract fun psqiDao(): PsqiDao
+    abstract fun stepRecordDao(): StepRecordDao
+    abstract fun stepCheckpointDao(): StepCheckpointDao
 
     /**
-     * Atomically clears all sleep-tracking data tables in a single database transaction.
+     * Atomically clears all sleep-tracking and activity data tables in a single database transaction.
      * Prevents partial deletion states if interrupted.
      */
     @androidx.room.Transaction
     open suspend fun clearAllDataTables() {
+        stepCheckpointDao().deleteAll()
+        stepRecordDao().deleteAll()
         solRecordDao().deleteAll()
         psqiDao().deleteAll()
         sleepSessionDao().deleteAll()
@@ -116,9 +122,53 @@ abstract class SomnusDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 2 to version 3
+         * adding Step Tracking tables: `step_records` and `step_checkpoints`.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create step_records table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `step_records` (
+                        `id` TEXT NOT NULL PRIMARY KEY,
+                        `startTime` INTEGER NOT NULL,
+                        `endTime` INTEGER NOT NULL,
+                        `localDate` TEXT NOT NULL,
+                        `zoneId` TEXT NOT NULL,
+                        `stepCount` INTEGER NOT NULL,
+                        `source` TEXT NOT NULL,
+                        `sourceIdentifier` TEXT NOT NULL,
+                        `deviceModel` TEXT,
+                        `externalRecordId` TEXT,
+                        `createdAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_step_records_localDate` ON `step_records` (`localDate`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_step_records_startTime` ON `step_records` (`startTime`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_step_records_externalRecordId` ON `step_records` (`externalRecordId`)")
+
+                // Create step_checkpoints table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `step_checkpoints` (
+                        `id` TEXT NOT NULL PRIMARY KEY,
+                        `bootTimestamp` INTEGER NOT NULL,
+                        `lastSensorValue` REAL NOT NULL,
+                        `accumulatedSteps` INTEGER NOT NULL,
+                        `lastUpdateEpochMs` INTEGER NOT NULL,
+                        `localDate` TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        /**
          * List of explicit Room migrations.
          */
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 
         fun buildDatabase(context: Context, databaseName: String = DATABASE_NAME): SomnusDatabase {
             return Room.databaseBuilder(

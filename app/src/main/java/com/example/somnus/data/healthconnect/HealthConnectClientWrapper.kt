@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.time.Instant
@@ -17,6 +18,8 @@ interface HealthConnectClientWrapper {
     fun getAvailability(): HealthConnectAvailability
     suspend fun hasPermissions(): Boolean
     suspend fun readSleepRecords(startTime: Instant, endTime: Instant): List<HealthConnectSleepRecord>
+    suspend fun hasStepPermissions(): Boolean
+    suspend fun readStepRecords(startTime: Instant, endTime: Instant): List<HealthConnectStepRecord>
 }
 
 /**
@@ -30,6 +33,9 @@ class DefaultHealthConnectClientWrapper(
     companion object {
         val REQUIRED_PERMISSIONS = setOf(
             HealthPermission.getReadPermission(SleepSessionRecord::class)
+        )
+        val STEP_PERMISSIONS = setOf(
+            HealthPermission.getReadPermission(StepsRecord::class)
         )
     }
 
@@ -55,6 +61,13 @@ class DefaultHealthConnectClientWrapper(
         return granted.containsAll(REQUIRED_PERMISSIONS)
     }
 
+    override suspend fun hasStepPermissions(): Boolean {
+        if (getAvailability() != HealthConnectAvailability.AVAILABLE) return false
+        val client = HealthConnectClient.getOrCreate(context)
+        val granted = client.permissionController.getGrantedPermissions()
+        return granted.containsAll(STEP_PERMISSIONS)
+    }
+
     override suspend fun readSleepRecords(
         startTime: Instant,
         endTime: Instant
@@ -76,6 +89,32 @@ class DefaultHealthConnectClientWrapper(
                 endTime = record.endTime,
                 title = record.title,
                 notes = record.notes,
+                sourcePackage = record.metadata.dataOrigin.packageName,
+                deviceModel = record.metadata.device?.model
+            )
+        }
+    }
+
+    override suspend fun readStepRecords(
+        startTime: Instant,
+        endTime: Instant
+    ): List<HealthConnectStepRecord> {
+        if (getAvailability() != HealthConnectAvailability.AVAILABLE) {
+            throw IllegalStateException("Health Connect is not available on this device.")
+        }
+        val client = HealthConnectClient.getOrCreate(context)
+        val request = ReadRecordsRequest(
+            recordType = StepsRecord::class,
+            timeRangeFilter = TimeRangeFilter.between(startTime, endTime)
+        )
+        val response = client.readRecords(request)
+
+        return response.records.map { record ->
+            HealthConnectStepRecord(
+                id = record.metadata.id,
+                startTime = record.startTime,
+                endTime = record.endTime,
+                count = record.count,
                 sourcePackage = record.metadata.dataOrigin.packageName,
                 deviceModel = record.metadata.device?.model
             )

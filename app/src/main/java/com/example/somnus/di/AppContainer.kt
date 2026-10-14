@@ -12,7 +12,13 @@ import com.example.somnus.data.repository.SleepSessionRepository
 import com.example.somnus.data.repository.SleepSessionRepositoryImpl
 import com.example.somnus.data.repository.SolRepository
 import com.example.somnus.data.repository.SolRepositoryImpl
+import com.example.somnus.data.repository.StepRepository
+import com.example.somnus.data.repository.StepRepositoryImpl
+import com.example.somnus.data.sensor.PhoneStepTracker
 import com.example.somnus.session.SessionManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Clean dependency container providing constructor injection for repositories and managers.
@@ -28,6 +34,8 @@ interface AppContainer {
     val healthConnectClientWrapper: com.example.somnus.data.healthconnect.HealthConnectClientWrapper
     val healthConnectManager: com.example.somnus.data.healthconnect.HealthConnectManager
     val phoneSensorTracker: com.example.somnus.data.sensor.PhoneSensorTracker
+    val stepRepository: StepRepository
+    val phoneStepTracker: PhoneStepTracker
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -68,14 +76,30 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         com.example.somnus.data.healthconnect.DefaultHealthConnectClientWrapper(context)
     }
 
+    override val stepRepository: StepRepository by lazy {
+        StepRepositoryImpl(
+            stepRecordDao = database.stepRecordDao(),
+            stepCheckpointDao = database.stepCheckpointDao()
+        )
+    }
+
     override val healthConnectManager: com.example.somnus.data.healthconnect.HealthConnectManager by lazy {
         com.example.somnus.data.healthconnect.HealthConnectManager(
             clientWrapper = healthConnectClientWrapper,
-            repository = sleepSessionRepository
+            repository = sleepSessionRepository,
+            stepRepository = stepRepository
         )
     }
 
     override val phoneSensorTracker: com.example.somnus.data.sensor.PhoneSensorTracker by lazy {
         com.example.somnus.data.sensor.PhoneSensorTracker(context)
+    }
+
+    override val phoneStepTracker: PhoneStepTracker by lazy {
+        PhoneStepTracker(
+            context = context,
+            stepRepository = stepRepository,
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        )
     }
 }

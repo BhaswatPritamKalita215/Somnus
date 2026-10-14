@@ -26,6 +26,18 @@ data class HealthConnectSleepRecord(
 )
 
 /**
+ * Intermediate data structure holding step records read from Health Connect.
+ */
+data class HealthConnectStepRecord(
+    val id: String,
+    val startTime: Instant,
+    val endTime: Instant,
+    val count: Long,
+    val sourcePackage: String? = null,
+    val deviceModel: String? = null
+)
+
+/**
  * Result summary of a Health Connect synchronization operation.
  */
 data class HealthConnectSyncSummary(

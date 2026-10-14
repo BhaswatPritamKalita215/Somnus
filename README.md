@@ -1,16 +1,17 @@
-# Somnus — Native Android Sleep Tracker (Milestones 1–5)
+# Somnus — Native Android Sleep Tracker (Milestones 1–6)
 
-**Somnus** is a local-first, privacy-focused native Android sleep-tracking application built with Kotlin and Jetpack Compose. Somnus prioritizes detailed sleep records, measurable accuracy, transparent uncertainty, battery efficiency, and zero telemetry.
+**Somnus** is a local-first, privacy-focused native Android sleep-tracking application built with Kotlin and Jetpack Compose. Somnus prioritizes detailed sleep records, physical activity tracking, measurable accuracy, transparent uncertainty, battery efficiency, and zero telemetry.
 
 ---
 
 ## 1. Product Philosophy & Scientific Honesty
 
-- **Local-Only Architecture**: All data is stored strictly in a local SQLite database using Android Room. Somnus contains **no cloud backend, no remote database, no user accounts, no telemetry, no analytics SDKs, and no advertising services**. Your sleep data never leaves your physical device.
+- **Local-Only Architecture**: All data is stored strictly in a local SQLite database using Android Room. Somnus contains **no cloud backend, no remote database, no user accounts, no telemetry, no analytics SDKs, and no advertising services**. Your sleep and step data never leaves your physical device.
 - **Scientific Honesty**:
   - Sleep tracking distinguishes **Time in Bed (TIB)** from physiological sleep onset. Somnus does **not** invent heart-rate, HRV, respiratory rate, or sleep-stage values (light, deep, REM) that have not been collected.
   - Consumer wearables and phone accelerometers approximate sleep onset from physical stillness; phone motion alone does not identify physiological sleep onset with clinical accuracy.
   - Sourced observations are strictly segregated: Wearable imports and algorithmic estimates are preserved in parallel with self-reported values and **never overwrite** self-reported metrics.
+  - **Step Tracking & Activity**: Somnus reconciles steps intelligently without blind summation. Wearable on-body steps and phone sensor steps for overlapping intervals are deduplicated to avoid false double-counting, while non-overlapping intervals (e.g. phone steps while watch was charging) are combined.
 - **PSQI Copyright & Instrument Compliance**:
   - The 19-item Pittsburgh Sleep Quality Index is a copyrighted instrument belonging to the University of Pittsburgh (Buysse et al., 1989).
   - Somnus does **not** ship a fabricated or unauthorized reproduction of the questionnaire. Instead, it provides the pure Kotlin scoring engine, persistent schema, and a synthetic verification test runner. When authorized questionnaire licensing is configured, the instrument plugs into the existing architecture.
@@ -25,10 +26,10 @@
 - **UI Toolkit**: Jetpack Compose with Material 3
 - **Design Identity**: Dark-first, restrained midnight-blue theme (`#080C16` obsidian background, `#82AAFF` astral blue primary, `#56CFE1` moonlight teal secondary) with full support for light mode
 - **Architecture**: MVVM with repository interfaces and constructor injection (`AppContainer`)
-- **Persistence**: Android Room (SQLite) with explicit migration management (`SomnusDatabase` version 2) and enforced foreign keys (`PRAGMA foreign_keys = ON;`)
+- **Persistence**: Android Room (SQLite) with explicit migration management (`SomnusDatabase` version 3) and enforced foreign keys (`PRAGMA foreign_keys = ON;`)
 - **Preferences**: Jetpack DataStore Preferences
 - **Asynchronous Concurrency**: Kotlin Coroutines and reactive `StateFlow`
-- **Testing**: JUnit 4, Kotlin Coroutines Test, Robolectric, AndroidX Arch Core Testing (123 passing tests)
+- **Testing**: JUnit 4, Kotlin Coroutines Test, Robolectric, AndroidX Arch Core Testing (144 passing tests)
 
 ---
 
@@ -231,7 +232,7 @@ Milestone 4 introduces a dedicated, testable domain analytics engine and an inte
 
 ## 7. Verification & Test Suite
 
-The test suite contains **99 automated tests** across domain logic, scoring engines, database DAOs, migrations, analytics calculators, and ViewModels. All pass with 100% success rate:
+The test suite contains **144 automated tests** across domain logic, scoring engines, database DAOs, migrations, analytics calculators, step tracking reconciliation, and ViewModels. All pass with 100% success rate:
 
 ```powershell
 .\gradlew.bat test
@@ -250,13 +251,17 @@ The test suite contains **99 automated tests** across domain logic, scoring engi
 10. `SolCalculatorTest`: Latency minutes calculation, midnight crossing, onset before attempt rejection, quality flag evaluation, mean/median/range summaries.
 11. `PsqiScoringEngineTest`: All 7 components, exact cutoffs, efficiency percentages, synthetic fixtures (0, 8, 21), incomplete item rejection.
 12. `SleepSessionDaoTest`, `SolDaoTest`, `PsqiDaoTest`: Room persistence, queries, updates, deletes, and foreign key cascades.
-13. `SomnusDatabaseMigrationTest`: Migration verification from v1 to v2.
+13. `SomnusDatabaseMigrationTest`: Migration verification from v1 to v2 and v2 to v3 (step tracking tables and checkpoints).
 14. `SessionManagerTest`: Active tracking lifecycle, process restart survival.
 15. `HomeViewModelTest`, `HistoryViewModelTest`, `SessionDetailViewModelTest`, `SettingsViewModelTest`, `InsightsViewModelTest`: Complete StateFlow emissions and user mutation flows.
 16. `SleepSessionRepositoryValidationTest`: SQLite foreign key constraint enforcement (`PRAGMA foreign_keys = ON;`), atomic multi-table wipe (`clearAllDataTables()`), complete overlap topology checks, and stale session recovery.
 17. `HealthConnectManagerTest`: Capability detection (`AVAILABLE`, `UPDATE_REQUIRED`, `NOT_INSTALLED`, `NOT_SUPPORTED`), permission denial handling, wearable metadata attribution, interval deduplication, and non-destructive conflict prevention.
 18. `MovementWindowAggregatorTest`: Streaming Welford algorithm, constant-space $O(1)$ memory, stillness, 30-epoch nightstand stationary, minor restlessness, active movement, and unmonitored interruption categories.
 19. `SleepCalculationEdgeCasesTest`: DST spring forward (7 physical hours), DST fall backward (9 physical hours), circular mean midnight crossing, zero duration rejection, negative duration rejection, and >36h duration rejection.
+20. `StepReconciliationEngineTest`: Multi-source step reconciliation, overlapping interval deduplication without double counting, wearable prioritization, disjoint interval summation, 24-hour hourly distribution, and date range calculation.
+21. `PhoneStepTrackerTest`: Hardware step sensor cumulative baseline, reboot detection, counter reset handling, non-negative delta guarantee, and midnight date rollover.
+22. `HealthConnectStepImportTest`: Health Connect step sync, permission denial handling, device model / package attribution, and deduplication by external record ID.
+23. `ActivityViewModelTest`: UI StateFlow emissions, goal progress, custom step goal editing, and Health Connect sync orchestration.
 
 ---
 

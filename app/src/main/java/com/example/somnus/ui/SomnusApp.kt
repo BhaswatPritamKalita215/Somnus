@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.History
@@ -27,6 +28,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.somnus.SomnusApplication
 import com.example.somnus.data.preferences.ThemeMode
 import com.example.somnus.theme.SomnusTheme
+import com.example.somnus.ui.activity.ActivityScreen
+import com.example.somnus.ui.activity.ActivityViewModel
 import com.example.somnus.ui.analytics.AnalyticsScreen
 import com.example.somnus.ui.analytics.AnalyticsViewModel
 import com.example.somnus.ui.detail.SessionDetailScreen
@@ -42,6 +45,7 @@ import com.example.somnus.ui.settings.SettingsViewModel
 
 sealed interface Screen {
     data object Track : Screen
+    data object Activity : Screen
     data object History : Screen
     data object Analytics : Screen
     data object Insights : Screen
@@ -76,7 +80,7 @@ fun SomnusApp() {
         }
 
         fun navigateTo(screen: Screen) {
-            if (screen == Screen.Track || screen == Screen.History || screen == Screen.Analytics || screen == Screen.Insights || screen == Screen.Settings) {
+            if (screen == Screen.Track || screen == Screen.Activity || screen == Screen.History || screen == Screen.Analytics || screen == Screen.Insights || screen == Screen.Settings) {
                 // Top-level tab switch: clear backstack to root
                 backStack.clear()
                 backStack.add(screen)
@@ -95,6 +99,12 @@ fun SomnusApp() {
                             onClick = { navigateTo(Screen.Track) },
                             icon = { Icon(Icons.Default.Bedtime, contentDescription = "Track") },
                             label = { Text("Track") }
+                        )
+                        NavigationBarItem(
+                            selected = currentScreen is Screen.Activity,
+                            onClick = { navigateTo(Screen.Activity) },
+                            icon = { Icon(Icons.AutoMirrored.Filled.DirectionsWalk, contentDescription = "Activity") },
+                            label = { Text("Activity") }
                         )
                         NavigationBarItem(
                             selected = currentScreen is Screen.History,
@@ -141,6 +151,20 @@ fun SomnusApp() {
                             viewModel = homeViewModel,
                             onNavigateToHistory = { navigateTo(Screen.History) },
                             onNavigateToDetail = { sessionId -> navigateTo(Screen.Detail(sessionId)) }
+                        )
+                    }
+
+                    is Screen.Activity -> {
+                        val activityViewModel: ActivityViewModel = viewModel(
+                            factory = ActivityViewModel.provideFactory(
+                                stepRepository = container.stepRepository,
+                                phoneStepTracker = container.phoneStepTracker,
+                                healthConnectManager = container.healthConnectManager,
+                                userPreferencesRepository = container.userPreferencesRepository
+                            )
+                        )
+                        ActivityScreen(
+                            viewModel = activityViewModel
                         )
                     }
 

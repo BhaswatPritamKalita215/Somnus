@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Health Connect Permissions for importing wearable sleep records -->
+    <!-- Health Connect Permissions for importing wearable sleep records and steps -->
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="androidx.health.permission.SleepSessionRecord.READ" />
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="androidx.health.permission.StepsRecord.READ" />
+
+    <!-- Runtime permission for hardware step counter / detector on Android 10+ (API 29+) -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
     <!-- Queries declaration for Health Connect client packages -->
     <queries>

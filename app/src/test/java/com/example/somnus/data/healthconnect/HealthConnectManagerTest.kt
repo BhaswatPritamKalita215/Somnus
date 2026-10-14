@@ -30,7 +30,9 @@ import java.util.UUID
 class FakeHealthConnectClientWrapper : HealthConnectClientWrapper {
     var stubbedAvailability: HealthConnectAvailability = HealthConnectAvailability.AVAILABLE
     var permissionsGranted: Boolean = true
+    var stepPermissionsGranted: Boolean = true
     var sleepRecordsToReturn: MutableList<HealthConnectSleepRecord> = mutableListOf()
+    var stepRecordsToReturn: MutableList<HealthConnectStepRecord> = mutableListOf()
     var shouldThrowException: Exception? = null
 
     override fun getAvailability(): HealthConnectAvailability = stubbedAvailability
@@ -43,6 +45,16 @@ class FakeHealthConnectClientWrapper : HealthConnectClientWrapper {
     ): List<HealthConnectSleepRecord> {
         shouldThrowException?.let { throw it }
         return sleepRecordsToReturn
+    }
+
+    override suspend fun hasStepPermissions(): Boolean = stepPermissionsGranted
+
+    override suspend fun readStepRecords(
+        startTime: Instant,
+        endTime: Instant
+    ): List<HealthConnectStepRecord> {
+        shouldThrowException?.let { throw it }
+        return stepRecordsToReturn
     }
 }
 
