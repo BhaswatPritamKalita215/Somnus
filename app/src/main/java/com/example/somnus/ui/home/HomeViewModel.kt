@@ -18,7 +18,8 @@ data class HomeUiState(
     val recentSessions: List<SleepSession> = emptyList(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val showEndConfirmation: Boolean = false
+    val showEndConfirmation: Boolean = false,
+    val isSessionStale: Boolean = false
 )
 
 class HomeViewModel(
@@ -36,7 +37,8 @@ class HomeViewModel(
         internalState.copy(
             activeSession = activeSession,
             recentSessions = completed.take(3),
-            isLoading = false
+            isLoading = false,
+            isSessionStale = sessionManager.isCurrentSessionStale()
         )
     }.stateIn(
         scope = viewModelScope,
@@ -98,6 +100,25 @@ class HomeViewModel(
                 _uiStateInternal.value = _uiStateInternal.value.copy(
                     isLoading = false,
                     errorMessage = error.message ?: "Failed to discard session"
+                )
+            }.onSuccess {
+                _uiStateInternal.value = _uiStateInternal.value.copy(isLoading = false)
+            }
+        }
+    }
+
+    fun recoverStaleSession(correctedEndTime: java.time.Instant, notes: String? = null) {
+        viewModelScope.launch {
+            _uiStateInternal.value = _uiStateInternal.value.copy(
+                isLoading = true,
+                showEndConfirmation = false,
+                errorMessage = null
+            )
+            val result = sessionManager.recoverActiveSession(correctedEndTime, notes)
+            result.onFailure { error ->
+                _uiStateInternal.value = _uiStateInternal.value.copy(
+                    isLoading = false,
+                    errorMessage = error.message ?: "Failed to recover session"
                 )
             }.onSuccess {
                 _uiStateInternal.value = _uiStateInternal.value.copy(isLoading = false)

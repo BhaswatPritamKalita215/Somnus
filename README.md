@@ -1,4 +1,4 @@
-# Somnus — Native Android Sleep Tracker (Milestones 1–4)
+# Somnus — Native Android Sleep Tracker (Milestones 1–5)
 
 **Somnus** is a local-first, privacy-focused native Android sleep-tracking application built with Kotlin and Jetpack Compose. Somnus prioritizes detailed sleep records, measurable accuracy, transparent uncertainty, battery efficiency, and zero telemetry.
 
@@ -25,10 +25,10 @@
 - **UI Toolkit**: Jetpack Compose with Material 3
 - **Design Identity**: Dark-first, restrained midnight-blue theme (`#080C16` obsidian background, `#82AAFF` astral blue primary, `#56CFE1` moonlight teal secondary) with full support for light mode
 - **Architecture**: MVVM with repository interfaces and constructor injection (`AppContainer`)
-- **Persistence**: Android Room (SQLite) with explicit migration management (`SomnusDatabase` version 2)
+- **Persistence**: Android Room (SQLite) with explicit migration management (`SomnusDatabase` version 2) and enforced foreign keys (`PRAGMA foreign_keys = ON;`)
 - **Preferences**: Jetpack DataStore Preferences
 - **Asynchronous Concurrency**: Kotlin Coroutines and reactive `StateFlow`
-- **Testing**: JUnit 4, Kotlin Coroutines Test, Robolectric, AndroidX Arch Core Testing (99 passing tests)
+- **Testing**: JUnit 4, Kotlin Coroutines Test, Robolectric, AndroidX Arch Core Testing (123 passing tests)
 
 ---
 
@@ -253,10 +253,21 @@ The test suite contains **99 automated tests** across domain logic, scoring engi
 13. `SomnusDatabaseMigrationTest`: Migration verification from v1 to v2.
 14. `SessionManagerTest`: Active tracking lifecycle, process restart survival.
 15. `HomeViewModelTest`, `HistoryViewModelTest`, `SessionDetailViewModelTest`, `SettingsViewModelTest`, `InsightsViewModelTest`: Complete StateFlow emissions and user mutation flows.
+16. `SleepSessionRepositoryValidationTest`: SQLite foreign key constraint enforcement (`PRAGMA foreign_keys = ON;`), atomic multi-table wipe (`clearAllDataTables()`), complete overlap topology checks, and stale session recovery.
+17. `HealthConnectManagerTest`: Capability detection (`AVAILABLE`, `UPDATE_REQUIRED`, `NOT_INSTALLED`, `NOT_SUPPORTED`), permission denial handling, wearable metadata attribution, interval deduplication, and non-destructive conflict prevention.
+18. `MovementWindowAggregatorTest`: Streaming Welford algorithm, constant-space $O(1)$ memory, stillness, 30-epoch nightstand stationary, minor restlessness, active movement, and unmonitored interruption categories.
+19. `SleepCalculationEdgeCasesTest`: DST spring forward (7 physical hours), DST fall backward (9 physical hours), circular mean midnight crossing, zero duration rejection, negative duration rejection, and >36h duration rejection.
 
 ---
 
-## 8. Building the Application
+## 8. Milestone 5 Engineering & Validation Documentation
+
+- [Physical Device Validation Protocol](docs/VALIDATION_PROTOCOL.md) — Standardized testing protocol covering process death survival, stale session recovery, overlapping collision rejection, Health Connect sync, phone sensor tracking, and battery drain profiling.
+- [Validation & Engineering Report](docs/VALIDATION_REPORT.md) — Comprehensive technical report covering codebase audit, prioritized defects, three-tier validation framework, and scientific honesty guarantees.
+
+---
+
+## 9. Building the Application
 
 Build the debug APK:
 ```powershell

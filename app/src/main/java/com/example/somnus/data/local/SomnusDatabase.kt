@@ -30,8 +30,29 @@ abstract class SomnusDatabase : RoomDatabase() {
     abstract fun solRecordDao(): SolRecordDao
     abstract fun psqiDao(): PsqiDao
 
+    /**
+     * Atomically clears all sleep-tracking data tables in a single database transaction.
+     * Prevents partial deletion states if interrupted.
+     */
+    @androidx.room.Transaction
+    open suspend fun clearAllDataTables() {
+        solRecordDao().deleteAll()
+        psqiDao().deleteAll()
+        sleepSessionDao().deleteAll()
+    }
+
     companion object {
         const val DATABASE_NAME = "somnus_sleep.db"
+
+        /**
+         * Enforces SQLite foreign key constraints on every database connection open.
+         */
+        private val DB_CALLBACK = object : RoomDatabase.Callback() {
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                super.onOpen(db)
+                db.execSQL("PRAGMA foreign_keys = ON;")
+            }
+        }
 
         /**
          * Migration from version 1 (sessions only) to version 2
@@ -106,6 +127,7 @@ abstract class SomnusDatabase : RoomDatabase() {
                 databaseName
             )
                 .addMigrations(*MIGRATIONS)
+                .addCallback(DB_CALLBACK)
                 // Note: We deliberately do NOT call fallbackToDestructiveMigration()
                 .build()
         }
@@ -115,6 +137,7 @@ abstract class SomnusDatabase : RoomDatabase() {
                 context.applicationContext,
                 SomnusDatabase::class.java
             )
+                .addCallback(DB_CALLBACK)
                 .allowMainThreadQueries()
                 .build()
         }

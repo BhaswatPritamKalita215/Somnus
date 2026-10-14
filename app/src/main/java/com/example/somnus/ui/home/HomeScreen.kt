@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -68,6 +69,9 @@ fun HomeScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showDiscardConfirmation by remember { mutableStateOf(false) }
+    var showRecoveryDialog by remember { mutableStateOf(false) }
+    var recoveryHoursText by remember { mutableStateOf("8.0") }
+    var recoveryNotes by remember { mutableStateOf("") }
     var completionNotes by remember { mutableStateOf("") }
     var endingDuration by remember { mutableStateOf<Duration?>(null) }
 
@@ -115,10 +119,12 @@ fun HomeScreen(
                     if (active != null && active.isActive) {
                         ActiveSessionCard(
                             session = active,
+                            isStale = state.isSessionStale,
                             onEndClick = { duration ->
                                 endingDuration = duration
                                 viewModel.promptEndSession()
                             },
+                            onRecoverClick = { showRecoveryDialog = true },
                             onDiscardClick = { showDiscardConfirmation = true }
                         )
                     } else {
@@ -237,13 +243,67 @@ fun HomeScreen(
                 onDismiss = { showDiscardConfirmation = false }
             )
         }
+
+        // Recover Stale Session Dialog
+        if (showRecoveryDialog) {
+            val session = state.activeSession
+            AlertDialog(
+                onDismissRequest = { showRecoveryDialog = false },
+                title = { Text("Recover Stale Session") },
+                text = {
+                    Column {
+                        Text(
+                            text = "Because this session ran past the 36-hour limit, specify your estimated hours slept to calculate a valid wake-up time.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = recoveryHoursText,
+                            onValueChange = { recoveryHoursText = it },
+                            label = { Text("Estimated Sleep Duration (hours)") },
+                            placeholder = { Text("e.g. 7.5 or 8.0") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = recoveryNotes,
+                            onValueChange = { recoveryNotes = it },
+                            label = { Text("Correction Notes (optional)") },
+                            placeholder = { Text("e.g. Forgot to stop session in the morning") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        val hours = recoveryHoursText.toDoubleOrNull() ?: 8.0
+                        val minutes = (hours * 60).toLong().coerceIn(1, 35 * 60)
+                        if (session != null) {
+                            val correctedEnd = session.startTime.plusSeconds(minutes * 60)
+                            val notes = recoveryNotes.trim().ifEmpty { null }
+                            showRecoveryDialog = false
+                            viewModel.recoverStaleSession(correctedEnd, notes)
+                        }
+                    }) {
+                        Text("Save & Complete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRecoveryDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 }
 
 @Composable
 private fun ActiveSessionCard(
     session: SleepSession,
+    isStale: Boolean,
     onEndClick: (Duration) -> Unit,
+    onRecoverClick: () -> Unit,
     onDiscardClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -257,6 +317,8 @@ private fun ActiveSessionCard(
             delay(1000)
         }
     }
+
+    val exceedsRealisticLimit = isStale || elapsed > Duration.ofHours(36)
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -274,10 +336,10 @@ private fun ActiveSessionCard(
                     StatusDot(isActive = true)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "SESSION IN PROGRESS",
+                        text = if (exceedsRealisticLimit) "STALE SESSION (>36h)" else "SESSION IN PROGRESS",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = if (exceedsRealisticLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                     )
                 }
                 ScientificHonestyBadge()
@@ -303,17 +365,55 @@ private fun ActiveSessionCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            if (exceedsRealisticLimit) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "This session ran past 36 hours. To record it, set your approximate sleep duration or discard.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = { onEndClick(elapsed) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Icon(imageVector = Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("End Session")
+                if (exceedsRealisticLimit) {
+                    Button(
+                        onClick = onRecoverClick,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(imageVector = Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Recover Session")
+                    }
+                } else {
+                    Button(
+                        onClick = { onEndClick(elapsed) },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(imageVector = Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("End Session")
+                    }
                 }
 
                 OutlinedButton(

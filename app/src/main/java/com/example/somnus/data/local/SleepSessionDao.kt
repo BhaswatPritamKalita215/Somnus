@@ -48,6 +48,19 @@ interface SleepSessionDao {
     @Query("DELETE FROM sleep_sessions")
     suspend fun deleteAll()
 
+    @Query("""
+        SELECT * FROM sleep_sessions 
+        WHERE status = 'COMPLETED' 
+        AND (:excludeId IS NULL OR id != :excludeId)
+        AND startTime < :endTimeEpochMs 
+        AND endTime > :startTimeEpochMs
+    """)
+    suspend fun findOverlappingSessions(
+        startTimeEpochMs: Long,
+        endTimeEpochMs: Long,
+        excludeId: String? = null
+    ): List<SleepSessionEntity>
+
     /**
      * Atomically starts a new session in a database transaction.
      * Enforces the invariant: at most one active session can exist.
@@ -77,7 +90,8 @@ interface SleepSessionDao {
         id: String,
         endTimeEpochMs: Long,
         updatedAtEpochMs: Long,
-        notes: String? = null
+        notes: String? = null,
+        isCorrected: Boolean = false
     ): SleepSessionEntity {
         val existing = getSessionById(id)
             ?: throw IllegalStateException("Session $id not found")
@@ -96,7 +110,8 @@ interface SleepSessionDao {
             endTime = endTimeEpochMs,
             status = "COMPLETED",
             updatedAt = updatedAtEpochMs,
-            notes = notes ?: existing.notes
+            notes = notes ?: existing.notes,
+            isCorrected = isCorrected || existing.isCorrected
         )
         update(completed)
         return completed

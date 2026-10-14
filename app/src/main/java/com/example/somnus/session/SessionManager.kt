@@ -91,6 +91,33 @@ class SessionManager(
     }
 
     /**
+     * Checks if the currently active session has exceeded the realistic duration limit (36 hours).
+     */
+    fun isCurrentSessionStale(): Boolean {
+        val session = activeSession.value ?: return false
+        val elapsed = calculateElapsed()
+        return session.isActive && elapsed > Duration.ofHours(36)
+    }
+
+    /**
+     * Completes a stale or active session with an explicitly provided corrected end time.
+     * Prevents users from being locked into an unclosable active state.
+     */
+    suspend fun recoverActiveSession(
+        correctedEndTime: Instant,
+        notes: String? = null
+    ): Result<SleepSession> {
+        val current = repository.getActiveSessionOneShot()
+            ?: return Result.failure(IllegalStateException("No active session to recover."))
+
+        return repository.recoverStaleActiveSession(
+            id = current.id,
+            correctedEndTime = correctedEndTime,
+            notes = notes
+        )
+    }
+
+    /**
      * Discards the currently active session without recording it as completed.
      */
     suspend fun discardActiveSession(): Result<Unit> {

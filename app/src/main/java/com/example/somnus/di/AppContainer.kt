@@ -25,6 +25,9 @@ interface AppContainer {
     val sleepAnalyticsRepository: SleepAnalyticsRepository
     val userPreferencesRepository: UserPreferencesRepository
     val sessionManager: SessionManager
+    val healthConnectClientWrapper: com.example.somnus.data.healthconnect.HealthConnectClientWrapper
+    val healthConnectManager: com.example.somnus.data.healthconnect.HealthConnectManager
+    val phoneSensorTracker: com.example.somnus.data.sensor.PhoneSensorTracker
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -59,5 +62,20 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val sessionManager: SessionManager by lazy {
         SessionManager(sleepSessionRepository)
+    }
+
+    override val healthConnectClientWrapper: com.example.somnus.data.healthconnect.HealthConnectClientWrapper by lazy {
+        com.example.somnus.data.healthconnect.DefaultHealthConnectClientWrapper(context)
+    }
+
+    override val healthConnectManager: com.example.somnus.data.healthconnect.HealthConnectManager by lazy {
+        com.example.somnus.data.healthconnect.HealthConnectManager(
+            clientWrapper = healthConnectClientWrapper,
+            repository = sleepSessionRepository
+        )
+    }
+
+    override val phoneSensorTracker: com.example.somnus.data.sensor.PhoneSensorTracker by lazy {
+        com.example.somnus.data.sensor.PhoneSensorTracker(context)
     }
 }

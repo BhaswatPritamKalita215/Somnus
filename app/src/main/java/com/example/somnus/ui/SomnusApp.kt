@@ -185,7 +185,8 @@ fun SomnusApp() {
                                 sessionRepository = container.sleepSessionRepository,
                                 solRepository = container.solRepository,
                                 psqiRepository = container.psqiRepository,
-                                preferencesRepository = container.userPreferencesRepository
+                                preferencesRepository = container.userPreferencesRepository,
+                                database = container.database
                             )
                         )
                         SettingsScreen(

@@ -82,4 +82,30 @@ interface SleepSessionRepository {
      * Permanently deletes all stored sleep sessions.
      */
     suspend fun deleteAllSessions(): Result<Unit>
+
+    /**
+     * Checks for completed sessions overlapping with a proposed time window.
+     * Used to prevent invalid overlapping entries.
+     */
+    suspend fun findOverlappingSessions(
+        startTime: Instant,
+        endTime: Instant,
+        excludeId: String? = null
+    ): List<SleepSession>
+
+    /**
+     * Completes an active session with an explicitly specified end time.
+     * Useful for recovering sessions that were accidentally left active past the realistic limit.
+     */
+    suspend fun recoverStaleActiveSession(
+        id: String,
+        correctedEndTime: Instant,
+        notes: String? = null
+    ): Result<SleepSession>
+
+    /**
+     * Inserts a completed sleep session (e.g. from Health Connect import or manual entry).
+     * Validates duration and rejects overlapping sessions.
+     */
+    suspend fun insertCompletedSession(session: SleepSession): Result<Unit>
 }

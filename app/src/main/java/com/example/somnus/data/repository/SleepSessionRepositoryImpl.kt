@@ -97,6 +97,17 @@ class SleepSessionRepositoryImpl(
             return@withContext Result.failure(IllegalArgumentException(validation.reason))
         }
 
+        val overlaps = dao.findOverlappingSessions(
+            startTimeEpochMs = active.startTime,
+            endTimeEpochMs = endTime.toEpochMilli(),
+            excludeId = id
+        )
+        if (overlaps.isNotEmpty()) {
+            return@withContext Result.failure(
+                IllegalArgumentException("Completed session overlaps with an existing session (${overlaps.first().id})")
+            )
+        }
+
         try {
             val completedEntity = dao.completeSession(
                 id = id,
@@ -118,6 +129,19 @@ class SleepSessionRepositoryImpl(
         )
         if (validation is ValidationResult.Invalid) {
             return@withContext Result.failure(IllegalArgumentException(validation.reason))
+        }
+
+        if (session.status == SessionStatus.COMPLETED && session.endTime != null) {
+            val overlaps = dao.findOverlappingSessions(
+                startTimeEpochMs = session.startTime.toEpochMilli(),
+                endTimeEpochMs = session.endTime.toEpochMilli(),
+                excludeId = session.id
+            )
+            if (overlaps.isNotEmpty()) {
+                return@withContext Result.failure(
+                    IllegalArgumentException("Updated session overlaps with an existing completed session (${overlaps.first().id})")
+                )
+            }
         }
 
         try {
@@ -148,6 +172,97 @@ class SleepSessionRepositoryImpl(
     override suspend fun deleteAllSessions(): Result<Unit> = withContext(ioDispatcher) {
         try {
             dao.deleteAll()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun findOverlappingSessions(
+        startTime: Instant,
+        endTime: Instant,
+        excludeId: String?
+    ): List<SleepSession> = withContext(ioDispatcher) {
+        dao.findOverlappingSessions(
+            startTimeEpochMs = startTime.toEpochMilli(),
+            endTimeEpochMs = endTime.toEpochMilli(),
+            excludeId = excludeId
+        ).map { it.toDomain() }
+    }
+
+    override suspend fun recoverStaleActiveSession(
+        id: String,
+        correctedEndTime: Instant,
+        notes: String?
+    ): Result<SleepSession> = withContext(ioDispatcher) {
+        val active = dao.getSessionById(id)
+            ?: return@withContext Result.failure(IllegalStateException("Session $id does not exist"))
+
+        val validation = SessionValidator.validate(
+            start = Instant.ofEpochMilli(active.startTime),
+            end = correctedEndTime,
+            status = SessionStatus.COMPLETED
+        )
+        if (validation is ValidationResult.Invalid) {
+            return@withContext Result.failure(IllegalArgumentException(validation.reason))
+        }
+
+        val overlaps = dao.findOverlappingSessions(
+            startTimeEpochMs = active.startTime,
+            endTimeEpochMs = correctedEndTime.toEpochMilli(),
+            excludeId = id
+        )
+        if (overlaps.isNotEmpty()) {
+            return@withContext Result.failure(
+                IllegalArgumentException("Recovered session would overlap with an existing session (${overlaps.first().id})")
+            )
+        }
+
+        try {
+            val recoveryNote = if (notes.isNullOrBlank()) {
+                "[Recovered stale session]"
+            } else {
+                "[Recovered stale session] $notes"
+            }
+            val completedEntity = dao.completeSession(
+                id = id,
+                endTimeEpochMs = correctedEndTime.toEpochMilli(),
+                updatedAtEpochMs = Instant.now().toEpochMilli(),
+                notes = recoveryNote,
+                isCorrected = true
+            )
+            Result.success(completedEntity.toDomain())
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun insertCompletedSession(session: SleepSession): Result<Unit> = withContext(ioDispatcher) {
+        val validation = SessionValidator.validate(
+            start = session.startTime,
+            end = session.endTime,
+            status = SessionStatus.COMPLETED
+        )
+        if (validation is ValidationResult.Invalid) {
+            return@withContext Result.failure(IllegalArgumentException(validation.reason))
+        }
+
+        val endTime = session.endTime
+            ?: return@withContext Result.failure(IllegalArgumentException("Completed session must have a non-null end time"))
+
+        val overlaps = dao.findOverlappingSessions(
+            startTimeEpochMs = session.startTime.toEpochMilli(),
+            endTimeEpochMs = endTime.toEpochMilli(),
+            excludeId = session.id
+        )
+        if (overlaps.isNotEmpty()) {
+            return@withContext Result.failure(
+                IllegalArgumentException("Session overlaps with an existing session (${overlaps.first().id})")
+            )
+        }
+
+        try {
+            dao.insert(SleepSessionEntity.fromDomain(session))
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

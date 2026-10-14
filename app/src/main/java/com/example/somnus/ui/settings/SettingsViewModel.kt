@@ -32,7 +32,8 @@ class SettingsViewModel(
     private val sessionRepository: SleepSessionRepository,
     private val solRepository: SolRepository,
     private val psqiRepository: PsqiRepository,
-    private val preferencesRepository: UserPreferencesRepository
+    private val preferencesRepository: UserPreferencesRepository,
+    private val database: com.example.somnus.data.local.SomnusDatabase? = null
 ) : ViewModel() {
 
     private val _stateInternal = MutableStateFlow(SettingsUiState())
@@ -65,24 +66,40 @@ class SettingsViewModel(
     fun deleteAllData() {
         viewModelScope.launch {
             _stateInternal.value = _stateInternal.value.copy(isDeleting = true, errorMessage = null)
-            val sessionRes = sessionRepository.deleteAllSessions()
-            val solRes = solRepository.deleteAll()
-            val psqiRes = psqiRepository.deleteAll()
-
-            if (sessionRes.isSuccess && solRes.isSuccess && psqiRes.isSuccess) {
-                _stateInternal.value = _stateInternal.value.copy(
-                    isDeleting = false,
-                    deletionSuccess = true
-                )
+            if (database != null) {
+                try {
+                    database.clearAllDataTables()
+                    _stateInternal.value = _stateInternal.value.copy(
+                        isDeleting = false,
+                        deletionSuccess = true
+                    )
+                } catch (e: Exception) {
+                    _stateInternal.value = _stateInternal.value.copy(
+                        isDeleting = false,
+                        errorMessage = e.message ?: "Failed to delete data atomically"
+                    )
+                }
             } else {
-                val errorMsg = sessionRes.exceptionOrNull()?.message
-                    ?: solRes.exceptionOrNull()?.message
-                    ?: psqiRes.exceptionOrNull()?.message
-                    ?: "Failed to delete data"
-                _stateInternal.value = _stateInternal.value.copy(
-                    isDeleting = false,
-                    errorMessage = errorMsg
-                )
+                // Delete child tables first to respect foreign keys
+                val solRes = solRepository.deleteAll()
+                val psqiRes = psqiRepository.deleteAll()
+                val sessionRes = sessionRepository.deleteAllSessions()
+
+                if (sessionRes.isSuccess && solRes.isSuccess && psqiRes.isSuccess) {
+                    _stateInternal.value = _stateInternal.value.copy(
+                        isDeleting = false,
+                        deletionSuccess = true
+                    )
+                } else {
+                    val errorMsg = solRes.exceptionOrNull()?.message
+                        ?: psqiRes.exceptionOrNull()?.message
+                        ?: sessionRes.exceptionOrNull()?.message
+                        ?: "Failed to delete data"
+                    _stateInternal.value = _stateInternal.value.copy(
+                        isDeleting = false,
+                        errorMessage = errorMsg
+                    )
+                }
             }
         }
     }
@@ -99,7 +116,8 @@ class SettingsViewModel(
             sessionRepository: SleepSessionRepository,
             solRepository: SolRepository,
             psqiRepository: PsqiRepository,
-            preferencesRepository: UserPreferencesRepository
+            preferencesRepository: UserPreferencesRepository,
+            database: com.example.somnus.data.local.SomnusDatabase? = null
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -107,7 +125,8 @@ class SettingsViewModel(
                     sessionRepository = sessionRepository,
                     solRepository = solRepository,
                     psqiRepository = psqiRepository,
-                    preferencesRepository = preferencesRepository
+                    preferencesRepository = preferencesRepository,
+                    database = database
                 ) as T
             }
         }
