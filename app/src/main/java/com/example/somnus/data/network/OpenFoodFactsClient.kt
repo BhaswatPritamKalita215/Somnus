@@ -1,5 +1,6 @@
 package com.example.somnus.data.network
 
+import com.example.somnus.BuildConfig
 import com.example.somnus.domain.analysis.NutritionCalculator
 import com.example.somnus.domain.model.BarcodeFormat
 import com.example.somnus.domain.model.FoodProduct
@@ -39,7 +40,8 @@ class OpenFoodFactsClient(
 ) : FoodDatabaseClient {
 
     companion object {
-        const val USER_AGENT = "Somnus - Android - Version 1.4.0 (contact: local-first-sleep-tracker)"
+        private const val CONTACT = "https://github.com/BhaswatPritamKalita215/Somnus.git"
+        val USER_AGENT = "SomnusAndroid/${BuildConfig.VERSION_NAME} ($CONTACT)"
         const val TIMEOUT_MS = 6000
     }
 

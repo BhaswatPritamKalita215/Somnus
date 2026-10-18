@@ -175,4 +175,10 @@ class OpenFoodFactsClientTest {
         assertEquals(0.71, product.saltGrams!!, 0.01)
         assertEquals(DataCompleteness.COMPLETE, product.completeness)
     }
+
+    @Test
+    fun userAgent_hasExpectedFormatWithVersionNameAndContact() {
+        val expected = "SomnusAndroid/${com.example.somnus.BuildConfig.VERSION_NAME} (https://github.com/BhaswatPritamKalita215/Somnus.git)"
+        assertEquals(expected, OpenFoodFactsClient.USER_AGENT)
+    }
 }
