@@ -1,12 +1,20 @@
 package com.example.somnus.domain.model
 
+import com.example.somnus.BuildConfig
+
 /**
  * Standard synthetic test fixtures for the Pittsburgh Sleep Quality Index (PSQI).
  *
- * Used for automated verification and test runner execution prior to authorized
- * instrument configuration, adhering to copyright compliance guidelines.
+ * Debug-only test fixtures for automated verification and test runner execution
+ * adhering to copyright compliance guidelines.
  */
 object SyntheticPsqiFixtures {
+
+    init {
+        check(BuildConfig.DEBUG) {
+            "SyntheticPsqiFixtures is restricted to debug builds and automated test suites."
+        }
+    }
 
     /**
      * Perfect score fixture (all optimal parameters).

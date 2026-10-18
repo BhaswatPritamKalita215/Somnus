@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.somnus.BuildConfig
 import com.example.somnus.domain.model.PsqiAssessment
 import com.example.somnus.domain.model.PsqiComponentScores
 import com.example.somnus.domain.model.PsqiResponses
@@ -79,13 +80,15 @@ fun PsqiSection(
         // Instrument Copyright & Compliance Card
         InstrumentNoticeCard()
 
-        // Synthetic Fixture Evaluation Runner
-        SyntheticRunnerCard(
-            onRunFixture = { fixture, name ->
-                onScoreAssessment(fixture, "Synthetic-Fixture-v1", "Past 1 Month", "Tested via $name")
-            },
-            onOpenCustom = { showCustomDialog = true }
-        )
+        // Synthetic Fixture Evaluation Runner (Debug only)
+        if (BuildConfig.DEBUG) {
+            SyntheticRunnerCard(
+                onRunFixture = { fixture, name ->
+                    onScoreAssessment(fixture, "Synthetic-Fixture-v1", "Past 1 Month", "Tested via $name")
+                },
+                onOpenCustom = { showCustomDialog = true }
+            )
+        }
 
         // Latest Assessment Result Card
         LatestPsqiCard(assessment = uiState.latestCompletedPsqi)
