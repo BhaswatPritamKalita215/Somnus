@@ -1,6 +1,5 @@
 package com.example.somnus.domain.assistant
 
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -40,7 +39,7 @@ interface AssistantModelProvider {
 class DeterministicLocalAssistantModelProvider : AssistantModelProvider {
 
     override val isAvailable: Boolean = true
-    override val modelName: String = "Somnus-Local-Synthesizer"
+    override val modelName: String = "Local rules assistant"
     override val isNeuralModel: Boolean = false
 
     override suspend fun generateResponse(promptContext: PromptContext): Flow<ModelChunk> = flow {
@@ -48,26 +47,17 @@ class DeterministicLocalAssistantModelProvider : AssistantModelProvider {
         val data = promptContext.compactDataContext
 
         val synthesizedResponse = synthesizeResponseFromData(query, data)
-        val words = synthesizedResponse.split(" ")
-        val sb = StringBuilder()
-
         val inputTokens = promptContext.estimatedInputTokens
-        var outputTokens = 0
+        val outputTokens = TokenBudgetConfig.estimateTokens(synthesizedResponse)
 
-        // Stream word by word with realistic cadence
-        for (i in words.indices) {
-            sb.append(words[i]).append(" ")
-            outputTokens = TokenBudgetConfig.estimateTokens(sb.toString())
-            emit(
-                ModelChunk(
-                    text = sb.toString().trimEnd(),
-                    isComplete = i == words.lastIndex,
-                    inputTokensUsed = inputTokens,
-                    outputTokensUsed = outputTokens
-                )
+        emit(
+            ModelChunk(
+                text = synthesizedResponse,
+                isComplete = true,
+                inputTokensUsed = inputTokens,
+                outputTokensUsed = outputTokens
             )
-            delay(20) // 20ms word cadence
-        }
+        )
     }
 
     private fun synthesizeResponseFromData(fullPrompt: String, dataContext: String): String {

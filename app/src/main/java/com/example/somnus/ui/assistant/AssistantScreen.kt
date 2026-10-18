@@ -112,7 +112,7 @@ fun AssistantScreen(
     Scaffold(
         topBar = {
             SomnusTopBar(
-                title = "Somnus Assistant",
+                title = "Local rules assistant",
                 subtitle = "Local-First • Zero Cloud Telemetry",
                 onBackClick = onNavigateBack,
                 actions = {
@@ -272,7 +272,7 @@ fun WelcomeAssistantView(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Your Private Health Assistant",
+            text = "Local rules assistant",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
@@ -435,7 +435,7 @@ fun AssistantMessageBubble(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "On-Device AI (Synthesized)",
+                        text = "Local rules assistant (Synthesized)",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
@@ -726,9 +726,9 @@ fun DiagnosticsSheetContent(
                 modifier = Modifier.weight(1f)
             )
             DiagnosticMetricCard(
-                title = "Model Bypass",
+                title = "Rule Bypass",
                 value = String.format(java.util.Locale.US, "%.1f%%", diagnostics.modelBypassPercentage),
-                subtitle = "${diagnostics.localDeterministicCount} skipped AI",
+                subtitle = "${diagnostics.localDeterministicCount} zero-token rules",
                 modifier = Modifier.weight(1f)
             )
         }

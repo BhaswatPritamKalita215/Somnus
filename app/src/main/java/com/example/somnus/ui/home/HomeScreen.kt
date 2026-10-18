@@ -129,7 +129,7 @@ fun HomeScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "AI Assistant",
+                            contentDescription = "Local rules assistant",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -1373,7 +1373,7 @@ fun DashboardAssistantCard(
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Somnus AI Assistant",
+                    text = "Local rules assistant",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
