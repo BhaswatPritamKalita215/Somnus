@@ -115,6 +115,9 @@ fun SettingsScreen(
                 onDeleteAllClick = { showDeleteAllConfirm = true }
             )
 
+            // About Section (Plain text Open Food Facts & ODbL attribution)
+            AboutCard()
+
             Spacer(modifier = Modifier.height(24.dp))
         }
 
@@ -367,6 +370,40 @@ private fun OnlineFoodLookupCard(
                 text = "When enabled, unrecognized barcodes are queried against Open Food Facts (openfoodfacts.org). Only the barcode number is sent over the network.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutCard(modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "About",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Product data from Open Food Facts (openfoodfacts.org), made available under the Open Database License (ODbL).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
             )
         }
     }

@@ -959,6 +959,13 @@ fun ProductFoundDialog(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Product data from Open Food Facts (openfoodfacts.org), made available under the Open Database License (ODbL).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         },
         confirmButton = {
