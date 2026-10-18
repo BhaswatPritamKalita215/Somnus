@@ -24,7 +24,8 @@ data class UserPreferences(
     val policyAcknowledged: Boolean = false,
     val dailyStepGoal: Int = 8000,
     val phoneStepTrackingEnabled: Boolean = true,
-    val dailyCalorieTarget: Int = 2000
+    val dailyCalorieTarget: Int = 2000,
+    val onlineFoodLookupEnabled: Boolean = false
 )
 
 class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
@@ -35,6 +36,7 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val DAILY_STEP_GOAL = intPreferencesKey("daily_step_goal")
         val PHONE_STEP_TRACKING_ENABLED = booleanPreferencesKey("phone_step_tracking_enabled")
         val DAILY_CALORIE_TARGET = intPreferencesKey("daily_calorie_target")
+        val ONLINE_FOOD_LOOKUP_ENABLED = booleanPreferencesKey("online_food_lookup_enabled")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data.map { preferences ->
@@ -48,12 +50,14 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val dailyStepGoal = preferences[PreferencesKeys.DAILY_STEP_GOAL] ?: 8000
         val phoneStepTrackingEnabled = preferences[PreferencesKeys.PHONE_STEP_TRACKING_ENABLED] ?: true
         val dailyCalorieTarget = preferences[PreferencesKeys.DAILY_CALORIE_TARGET] ?: 2000
+        val onlineFoodLookupEnabled = preferences[PreferencesKeys.ONLINE_FOOD_LOOKUP_ENABLED] ?: false
         UserPreferences(
             themeMode = themeMode,
             policyAcknowledged = acknowledged,
             dailyStepGoal = dailyStepGoal,
             phoneStepTrackingEnabled = phoneStepTrackingEnabled,
-            dailyCalorieTarget = dailyCalorieTarget
+            dailyCalorieTarget = dailyCalorieTarget,
+            onlineFoodLookupEnabled = onlineFoodLookupEnabled
         )
     }
 
@@ -84,6 +88,12 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setDailyCalorieTarget(target: Int) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.DAILY_CALORIE_TARGET] = target.coerceIn(500, 10000)
+        }
+    }
+
+    suspend fun setOnlineFoodLookupEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ONLINE_FOOD_LOOKUP_ENABLED] = enabled
         }
     }
 }

@@ -1337,6 +1337,35 @@ fun ManualFoodDialog(
 }
 
 /**
+ * Dialog shown when scanned barcode is not in local cache and online lookup is disabled.
+ */
+@Composable
+fun PromptOnlineLookupDialog(
+    barcode: String,
+    onAllowAndEnable: () -> Unit,
+    onManualEntry: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Online Food Lookup") },
+        text = {
+            Text("Look up this product on Open Food Facts? Only the barcode number is sent (your IP address is visible to their server).")
+        },
+        confirmButton = {
+            Button(onClick = onAllowAndEnable) {
+                Text("Allow and enable")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onManualEntry) {
+                Text("Enter manually")
+            }
+        }
+    )
+}
+
+/**
  * Loading dialog shown while querying local catalog and Open Food Facts.
  */
 @Composable

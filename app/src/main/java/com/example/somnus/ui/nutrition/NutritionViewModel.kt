@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -39,6 +40,7 @@ sealed interface ScanState {
     data object Idle : ScanState
     data object Scanning : ScanState
     data class LookingUp(val barcode: String) : ScanState
+    data class PromptOnlineLookup(val barcode: String) : ScanState
     data class ProductFound(
         val product: FoodProduct,
         val portionQuantity: Double,
@@ -202,24 +204,59 @@ class NutritionViewModel(
 
     fun onBarcodeDetected(barcode: String, format: BarcodeFormat) {
         viewModelScope.launch {
-            _scanState.value = ScanState.LookingUp(barcode)
-            val result = foodProductRepository.lookupWithRemoteFallback(barcode)
-            val product = result.getOrNull()
-            if (product != null) {
-                // Determine sensible default portion based on product data
-                val defaultUnit = product.servingUnit
-                val defaultQuantity = product.servingSize ?: 100.0
+            // Check local Room cache first
+            val localProduct = foodProductRepository.findByBarcodeSync(barcode)
+            if (localProduct != null) {
+                val defaultUnit = localProduct.servingUnit
+                val defaultQuantity = localProduct.servingSize ?: 100.0
                 val defaultMeal = guessCurrentMealType()
 
                 _scanState.value = ScanState.ProductFound(
-                    product = product,
+                    product = localProduct,
                     portionQuantity = defaultQuantity,
                     portionUnit = defaultUnit,
                     mealType = defaultMeal
                 )
-            } else {
-                _scanState.value = ScanState.ProductNotFound(barcode)
+                return@launch
             }
+
+            // Not in local cache. Check if online lookup toggle is enabled in DataStore
+            val isOnlineEnabled = userPreferencesRepository.userPreferencesFlow.first().onlineFoodLookupEnabled
+            if (!isOnlineEnabled) {
+                // With toggle OFF, never call OpenFoodFactsClient, prompt the user
+                _scanState.value = ScanState.PromptOnlineLookup(barcode)
+                return@launch
+            }
+
+            // Online lookup is enabled
+            performOnlineLookup(barcode)
+        }
+    }
+
+    fun allowAndEnableOnlineLookup(barcode: String) {
+        viewModelScope.launch {
+            userPreferencesRepository.setOnlineFoodLookupEnabled(true)
+            performOnlineLookup(barcode)
+        }
+    }
+
+    private suspend fun performOnlineLookup(barcode: String) {
+        _scanState.value = ScanState.LookingUp(barcode)
+        val result = foodProductRepository.lookupWithRemoteFallback(barcode, allowRemote = true)
+        val product = result.getOrNull()
+        if (product != null) {
+            val defaultUnit = product.servingUnit
+            val defaultQuantity = product.servingSize ?: 100.0
+            val defaultMeal = guessCurrentMealType()
+
+            _scanState.value = ScanState.ProductFound(
+                product = product,
+                portionQuantity = defaultQuantity,
+                portionUnit = defaultUnit,
+                mealType = defaultMeal
+            )
+        } else {
+            _scanState.value = ScanState.ProductNotFound(barcode)
         }
     }
 

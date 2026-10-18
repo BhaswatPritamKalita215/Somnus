@@ -63,6 +63,12 @@ class SettingsViewModel(
         }
     }
 
+    fun setOnlineFoodLookupEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.setOnlineFoodLookupEnabled(enabled)
+        }
+    }
+
     fun deleteAllData() {
         viewModelScope.launch {
             _stateInternal.value = _stateInternal.value.copy(isDeleting = true, errorMessage = null)

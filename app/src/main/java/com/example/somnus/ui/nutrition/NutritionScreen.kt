@@ -166,6 +166,15 @@ fun NutritionScreen(
 
             // Dialogs based on active ScanState
             when (val scan = uiState.scanState) {
+                is ScanState.PromptOnlineLookup -> {
+                    PromptOnlineLookupDialog(
+                        barcode = scan.barcode,
+                        onAllowAndEnable = { viewModel.allowAndEnableOnlineLookup(scan.barcode) },
+                        onManualEntry = { viewModel.openManualEntry(scan.barcode) },
+                        onDismiss = { viewModel.dismissScanState() }
+                    )
+                }
+
                 is ScanState.LookingUp -> {
                     LookingUpDialog(
                         barcode = scan.barcode,

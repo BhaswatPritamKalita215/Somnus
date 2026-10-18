@@ -23,6 +23,7 @@ import com.example.somnus.domain.model.ProductSource
 import com.example.somnus.domain.model.ServingUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -32,6 +33,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -82,8 +84,10 @@ class NutritionViewModelTest {
         completeness = DataCompleteness.COMPLETE
     )
 
+    private var remoteLookupCount = 0
     private val fakeRemoteClient = object : FoodDatabaseClient {
         override suspend fun lookupBarcode(barcode: String): Result<FoodProduct?> {
+            remoteLookupCount++
             return if (barcode == sampleProduct.barcode) {
                 Result.success(sampleProduct)
             } else {
@@ -173,8 +177,87 @@ class NutritionViewModelTest {
     }
 
     @Test
+    fun barcodeDetected_whenOnlineLookupDisabledAndNotInCache_transitionsToPromptOnlineLookup_andNeverCallsRemote() = runTest(testDispatcher) {
+        val collectJob = launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        // Verify default toggle is OFF
+        val prefs = preferencesRepository.userPreferencesFlow.first()
+        assertFalse(prefs.onlineFoodLookupEnabled)
+        assertEquals(0, remoteLookupCount)
+
+        // Scan barcode not in local cache
+        viewModel.onBarcodeDetected("5000159461122", BarcodeFormat.EAN_13)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue("Expected PromptOnlineLookup but was ${state.scanState}", state.scanState is ScanState.PromptOnlineLookup)
+        assertEquals("5000159461122", (state.scanState as ScanState.PromptOnlineLookup).barcode)
+
+        // Strict verification: OpenFoodFactsClient / remoteClient was NEVER called
+        assertEquals(0, remoteLookupCount)
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun allowAndEnableOnlineLookup_enablesPreferenceAndFetchesProduct() = runTest(testDispatcher) {
+        val collectJob = launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        // 1. Initial scan with toggle OFF prompts dialog and does not call remote
+        viewModel.onBarcodeDetected("5000159461122", BarcodeFormat.EAN_13)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.scanState is ScanState.PromptOnlineLookup)
+        assertEquals(0, remoteLookupCount)
+
+        // 2. User chooses "Allow and enable"
+        viewModel.allowAndEnableOnlineLookup("5000159461122")
+        advanceUntilIdle()
+
+        // 3. Preference is updated to true in DataStore
+        val updatedPrefs = preferencesRepository.userPreferencesFlow.first()
+        assertTrue(updatedPrefs.onlineFoodLookupEnabled)
+
+        // 4. Remote lookup was executed exactly once and product was found
+        assertEquals(1, remoteLookupCount)
+        val state = viewModel.uiState.value
+        assertTrue("Expected ProductFound but was ${state.scanState}", state.scanState is ScanState.ProductFound)
+        val found = state.scanState as ScanState.ProductFound
+        assertEquals("Snickers Bar", found.product.name)
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun barcodeDetected_whenProductInLocalCache_findsLocallyWithoutRemoteCallEvenIfOnlineDisabled() = runTest(testDispatcher) {
+        val collectJob = launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        // Save product into local Room cache
+        productRepository.saveProduct(sampleProduct)
+        advanceUntilIdle()
+
+        // Ensure online lookup is disabled
+        assertFalse(preferencesRepository.userPreferencesFlow.first().onlineFoodLookupEnabled)
+        assertEquals(0, remoteLookupCount)
+
+        // Scan barcode that exists in local cache
+        viewModel.onBarcodeDetected("5000159461122", BarcodeFormat.EAN_13)
+        advanceUntilIdle()
+
+        // Transitions directly to ProductFound without prompt and without calling remote
+        val state = viewModel.uiState.value
+        assertTrue(state.scanState is ScanState.ProductFound)
+        assertEquals(0, remoteLookupCount)
+
+        collectJob.cancel()
+    }
+
+    @Test
     fun barcodeDetected_productFound_transitionsToProductFoundState() = runTest(testDispatcher) {
         val collectJob = launch { viewModel.uiState.collect {} }
+        preferencesRepository.setOnlineFoodLookupEnabled(true)
         advanceUntilIdle()
 
         viewModel.onBarcodeDetected("5000159461122", BarcodeFormat.EAN_13)
@@ -193,6 +276,7 @@ class NutritionViewModelTest {
     @Test
     fun barcodeDetected_notFound_transitionsToNotFoundState() = runTest(testDispatcher) {
         val collectJob = launch { viewModel.uiState.collect {} }
+        preferencesRepository.setOnlineFoodLookupEnabled(true)
         advanceUntilIdle()
 
         viewModel.onBarcodeDetected("9999999999999", BarcodeFormat.EAN_13)
@@ -208,6 +292,7 @@ class NutritionViewModelTest {
     @Test
     fun confirmProductFound_logsFoodEntryAndUpdatesSummary() = runTest(testDispatcher) {
         val collectJob = launch { viewModel.uiState.collect {} }
+        preferencesRepository.setOnlineFoodLookupEnabled(true)
         advanceUntilIdle()
 
         // 1. Scan product
