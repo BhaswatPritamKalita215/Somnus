@@ -211,4 +211,67 @@ class AssistantRepositoryTest {
         messages = assistantRepository.conversationMessages.first()
         assertTrue(messages.isEmpty())
     }
+
+    @Test
+    fun invalidateCache_clearsDomainCacheEntries() = runTest(testDispatcher) {
+        // Query that gets cached under SLEEP domain
+        sleepSessionRepository.insertCompletedSession(
+            SleepSession(
+                id = "session-200",
+                startTime = Instant.parse("2026-10-09T23:00:00Z"),
+                endTime = Instant.parse("2026-10-10T07:00:00Z"),
+                status = SessionStatus.COMPLETED,
+                source = SessionSource.MANUAL
+            )
+        )
+
+        assistantRepository.processQuery("How did I sleep last night?").toList()
+        var diag = assistantRepository.diagnosticsFlow.first()
+        assertEquals(0, diag.cacheHits)
+
+        // Second call is a cache hit
+        assistantRepository.processQuery("How did I sleep last night?").toList()
+        diag = assistantRepository.diagnosticsFlow.first()
+        assertEquals(1, diag.cacheHits)
+
+        // Invalidate SLEEP cache
+        assistantRepository.invalidateCache(com.example.somnus.domain.assistant.DataReferenceDomain.SLEEP)
+
+        // Third call should now be a cache miss
+        assistantRepository.processQuery("How did I sleep last night?").toList()
+        diag = assistantRepository.diagnosticsFlow.first()
+        assertEquals(1, diag.cacheHits) // Count did not increase, so it was a miss
+        assertEquals(3, diag.totalRequests)
+    }
+
+    @Test
+    fun processQuery_whenModelUnavailable_gracefullyDegradesWithLocalData() = runTest(testDispatcher) {
+        val unavailableProvider = object : com.example.somnus.domain.assistant.AssistantModelProvider {
+            override val isAvailable: Boolean = false
+            override val modelName: String = "Unavailable Nano"
+            override val isNeuralModel: Boolean = true
+            override suspend fun generateResponse(
+                promptContext: com.example.somnus.domain.assistant.PromptContext
+            ) = kotlinx.coroutines.flow.emptyFlow<com.example.somnus.domain.assistant.ModelChunk>()
+        }
+
+        val repoWithUnavailableModel = AssistantRepositoryImpl(
+            dao = db.assistantMessageDao(),
+            localDataQueryService = localDataQueryService,
+            contextBuilder = contextBuilder,
+            modelProvider = unavailableProvider,
+            assistantCache = AssistantCache(ttlMs = 300_000L),
+            ioDispatcher = testDispatcher
+        )
+
+        // General non-local query
+        val results = repoWithUnavailableModel.processQuery("Can you synthesize and analyze my habits?").toList()
+        assertTrue(results.isNotEmpty())
+
+        val lastEmission = results.last()
+        assertTrue(lastEmission.wasLocalHandled)
+        assertFalse(lastEmission.isError)
+        assertTrue(lastEmission.content.contains("AI features unavailable on this device"))
+        assertTrue(lastEmission.content.contains("Your verified local health data remains safe"))
+    }
 }

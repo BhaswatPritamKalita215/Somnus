@@ -9,6 +9,7 @@ import com.example.somnus.data.repository.SolRepository
 import com.example.somnus.data.repository.StepRepository
 import com.example.somnus.domain.analysis.DurationCalculator
 import com.example.somnus.domain.analysis.NutritionCalculator
+import com.example.somnus.domain.analytics.CircularTimeCalculator
 import com.example.somnus.domain.analytics.SleepMetricsCalculator
 import com.example.somnus.domain.model.SleepSession
 import com.example.somnus.domain.model.SolRecord
@@ -286,7 +287,21 @@ class LocalDataQueryService(
                 )
             )
 
-            response = "Between ${start.format(dateFormatter)} and ${end.format(dateFormatter)}, you recorded ${validNights.size} nights of sleep, averaging $avgDurationText per night."
+            val bedtimes = validNights.mapNotNull { it.bedtime }
+            val avgBedtime = CircularTimeCalculator.calculateCircularMean(bedtimes)
+            val bedtimeClause = if (avgBedtime != null) {
+                references.add(
+                    DataReference(
+                        domain = DataReferenceDomain.SLEEP,
+                        label = "Average Bedtime",
+                        value = avgBedtime.toString(),
+                        provenance = "Circular mean across ${bedtimes.size} recorded nights"
+                    )
+                )
+                ", with an average bedtime of $avgBedtime"
+            } else ""
+
+            response = "Between ${start.format(dateFormatter)} and ${end.format(dateFormatter)}, you recorded ${validNights.size} nights of sleep, averaging $avgDurationText per night$bedtimeClause."
         } else {
             response = "No sleep sessions of 1 hour or more were recorded between ${start.format(dateFormatter)} and ${end.format(dateFormatter)}."
         }

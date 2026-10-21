@@ -52,6 +52,9 @@ sealed interface ScanState {
         val initialBarcode: String? = null,
         val initialMealType: MealType = MealType.SNACK
     ) : ScanState
+    data class EditEntry(
+        val entry: FoodLogEntry
+    ) : ScanState
 }
 
 data class NutritionUiState(
@@ -200,6 +203,10 @@ class NutritionViewModel(
 
     fun openManualEntry(barcode: String? = null, mealType: MealType = MealType.SNACK) {
         _scanState.value = ScanState.ManualEntry(barcode, mealType)
+    }
+
+    fun openEditEntry(entry: FoodLogEntry) {
+        _scanState.value = ScanState.EditEntry(entry)
     }
 
     fun onBarcodeDetected(barcode: String, format: BarcodeFormat) {
@@ -373,6 +380,51 @@ class NutritionViewModel(
             foodLogRepository.logFood(entry)
             _scanState.value = ScanState.Idle
             _feedbackMessage.value = "Saved and logged ${entry.productName}"
+        }
+    }
+
+    fun updateFoodLogEntry(
+        entryId: String,
+        name: String,
+        brand: String? = null,
+        mealType: MealType,
+        portionQuantity: Double,
+        portionUnit: ServingUnit,
+        calories: Int?,
+        protein: Double? = null,
+        carbs: Double? = null,
+        fat: Double? = null,
+        saturatedFat: Double? = null,
+        transFat: Double? = null,
+        fiber: Double? = null,
+        sugar: Double? = null,
+        addedSugars: Double? = null,
+        sodium: Double? = null,
+        salt: Double? = null
+    ) {
+        viewModelScope.launch {
+            val existing = foodLogRepository.getEntryById(entryId) ?: return@launch
+            val updated = existing.copy(
+                productName = name.trim().ifEmpty { existing.productName },
+                brand = brand?.trim()?.ifEmpty { null } ?: existing.brand,
+                mealType = mealType,
+                quantity = portionQuantity,
+                unit = portionUnit,
+                calculatedCalories = calories?.toDouble() ?: existing.calculatedCalories,
+                calculatedProtein = protein ?: existing.calculatedProtein,
+                calculatedCarbs = carbs ?: existing.calculatedCarbs,
+                calculatedFat = fat ?: existing.calculatedFat,
+                calculatedSaturatedFat = saturatedFat ?: existing.calculatedSaturatedFat,
+                calculatedTransFat = transFat ?: existing.calculatedTransFat,
+                calculatedFiber = fiber ?: existing.calculatedFiber,
+                calculatedSugar = sugar ?: existing.calculatedSugar,
+                calculatedAddedSugars = addedSugars ?: existing.calculatedAddedSugars,
+                calculatedSodiumMg = sodium ?: existing.calculatedSodiumMg,
+                calculatedSaltG = salt ?: existing.calculatedSaltG
+            )
+            foodLogRepository.updateEntry(updated)
+            _scanState.value = ScanState.Idle
+            _feedbackMessage.value = "Updated ${updated.productName}"
         }
     }
 

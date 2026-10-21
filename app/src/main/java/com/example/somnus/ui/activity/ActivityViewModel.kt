@@ -154,8 +154,20 @@ class ActivityViewModel(
         }
     }
 
-    fun syncHealthConnect() {
+    fun syncHealthConnect(onPermissionRequired: ((Set<String>) -> Unit)? = null) {
         viewModelScope.launch {
+            val availability = healthConnectManager.checkAvailability()
+            if (availability != com.example.somnus.data.healthconnect.HealthConnectAvailability.AVAILABLE) {
+                _syncMessage.value = "Health Connect: ${availability.description}"
+                return@launch
+            }
+
+            val hasStepPerms = healthConnectManager.hasStepPermissions()
+            if (!hasStepPerms && onPermissionRequired != null) {
+                onPermissionRequired(com.example.somnus.data.healthconnect.DefaultHealthConnectClientWrapper.STEP_PERMISSIONS)
+                return@launch
+            }
+
             _isSyncing.value = true
             _syncMessage.value = "Syncing step records from Health Connect..."
             val start = Instant.now().minus(7, ChronoUnit.DAYS)

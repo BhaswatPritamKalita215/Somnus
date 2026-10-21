@@ -54,7 +54,8 @@ object IntentRouter {
 
     private val MISSING_DATA_KEYWORDS = listOf(
         "why is my sleep missing", "why no sleep", "why no steps", "why zero", "missing data", "data missing", "sleep data missing",
-        "didn't record", "did not record", "lost data", "untracked", "data gaps", "data gap"
+        "didn't record", "did not record", "lost data", "untracked", "data gaps", "data gap",
+        "zero steps", "zero sleep", "zero recorded", "no steps recorded", "no sleep recorded"
     )
 
     /**
@@ -90,6 +91,8 @@ object IntentRouter {
         val isYesterday = normalized.contains("yesterday")
         val isThisWeek = normalized.contains("this week") || normalized.contains("past 7 days") || normalized.contains("last 7 days")
         val isPastWeek = normalized.contains("last week")
+        val isPastMonth = normalized.contains("30 days") || normalized.contains("past month") || normalized.contains("last month")
+        val isAverageQuery = normalized.contains("average") || normalized.contains("avg") || normalized.contains("typical") || normalized.contains("mean")
 
         val targetDate = when {
             isYesterday -> currentDate.minusDays(1)
@@ -97,8 +100,9 @@ object IntentRouter {
         }
 
         val dateRange = when {
-            isThisWeek -> currentDate.minusDays(6)..currentDate
+            isPastMonth -> currentDate.minusDays(29)..currentDate
             isPastWeek -> currentDate.minusDays(13)..currentDate.minusDays(7)
+            isThisWeek || isAverageQuery -> currentDate.minusDays(6)..currentDate
             else -> null
         }
 
@@ -150,7 +154,7 @@ object IntentRouter {
             }
         }
 
-        // 6. Sleep Tracking
+        // 7. Sleep Tracking
         if (containsAny(normalized, SLEEP_KEYWORDS)) {
             return if (dateRange != null) {
                 RoutedIntent(
@@ -168,7 +172,7 @@ object IntentRouter {
             }
         }
 
-        // 7. Energy Expenditure
+        // 8. Energy Expenditure
         if (containsAny(normalized, ENERGY_KEYWORDS)) {
             return RoutedIntent(
                 intentType = IntentType.ENERGY_EXPENDITURE,
@@ -178,7 +182,7 @@ object IntentRouter {
             )
         }
 
-        // 8. Nutrition / Food Intake
+        // 9. Nutrition / Food Intake
         if (containsAny(normalized, NUTRITION_KEYWORDS)) {
             return if (dateRange != null || isYesterday) {
                 RoutedIntent(
@@ -196,7 +200,7 @@ object IntentRouter {
             }
         }
 
-        // 9. Open-ended / complex question -> Handled with compact context & model synthesis
+        // 10. Open-ended / complex question -> Handled with compact context & model synthesis
         return RoutedIntent(
             intentType = IntentType.COMPLEX_SYNTHESIS,
             isLocal = false,

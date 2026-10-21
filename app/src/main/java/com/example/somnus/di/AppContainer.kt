@@ -40,6 +40,7 @@ interface AppContainer {
     val foodLogRepository: com.example.somnus.data.repository.FoodLogRepository
     val dashboardRepository: com.example.somnus.data.repository.DashboardRepository
     val assistantRepository: com.example.somnus.data.repository.AssistantRepository
+    val sleepCheckInRepository: com.example.somnus.data.repository.SleepCheckInRepository
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -133,6 +134,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         )
     }
 
+    override val sleepCheckInRepository: com.example.somnus.data.repository.SleepCheckInRepository by lazy {
+        com.example.somnus.data.repository.SleepCheckInRepositoryImpl(database.sleepCheckInDao())
+    }
+
     val assistantCache: com.example.somnus.domain.assistant.AssistantCache by lazy {
         com.example.somnus.domain.assistant.AssistantCache()
     }
@@ -161,7 +166,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     val assistantModelProvider: com.example.somnus.domain.assistant.AssistantModelProvider by lazy {
-        com.example.somnus.domain.assistant.DeterministicLocalAssistantModelProvider()
+        com.example.somnus.domain.assistant.AndroidAiCoreAssistantModelProvider(context)
     }
 
     override val assistantRepository: com.example.somnus.data.repository.AssistantRepository by lazy {
@@ -170,7 +175,11 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             localDataQueryService = localDataQueryService,
             contextBuilder = assistantContextBuilder,
             modelProvider = assistantModelProvider,
-            assistantCache = assistantCache
+            assistantCache = assistantCache,
+            sleepSessionRepository = sleepSessionRepository,
+            stepRepository = stepRepository,
+            foodLogRepository = foodLogRepository,
+            externalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         )
     }
 }

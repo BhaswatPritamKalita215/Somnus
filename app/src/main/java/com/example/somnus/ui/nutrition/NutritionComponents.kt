@@ -407,6 +407,7 @@ fun MealSectionCard(
     mealType: MealType,
     entries: List<FoodLogEntry>,
     onAddClick: () -> Unit,
+    onEditEntry: (FoodLogEntry) -> Unit = {},
     onDeleteEntry: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -464,6 +465,7 @@ fun MealSectionCard(
                 entries.forEach { entry ->
                     MealItemRow(
                         entry = entry,
+                        onEdit = { onEditEntry(entry) },
                         onDelete = { onDeleteEntry(entry.id) }
                     )
                     Spacer(modifier = Modifier.height(6.dp))
@@ -476,6 +478,7 @@ fun MealSectionCard(
 @Composable
 fun MealItemRow(
     entry: FoodLogEntry,
+    onEdit: () -> Unit = {},
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -490,6 +493,7 @@ fun MealItemRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .clickable(onClick = onEdit)
             .padding(10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -534,6 +538,18 @@ fun MealItemRow(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
+
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "Edit item",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
 
             IconButton(
                 onClick = onDelete,
@@ -989,8 +1005,9 @@ fun ProductFoundDialog(
  */
 @Composable
 fun ManualFoodDialog(
-    initialBarcode: String?,
-    initialMealType: MealType,
+    initialBarcode: String? = null,
+    initialMealType: MealType = MealType.SNACK,
+    existingEntry: FoodLogEntry? = null,
     onSaveAndLog: (
         name: String,
         nameHi: String?,
@@ -1021,33 +1038,57 @@ fun ManualFoodDialog(
     ) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(existingEntry?.productName ?: "") }
     var nameHi by remember { mutableStateOf("") }
-    var brand by remember { mutableStateOf("") }
-    var barcode by remember { mutableStateOf(initialBarcode ?: "") }
+    var brand by remember { mutableStateOf(existingEntry?.brand ?: "") }
+    var barcode by remember { mutableStateOf(existingEntry?.barcode ?: initialBarcode ?: "") }
     var category by remember { mutableStateOf<String?>(null) }
     var netQuantityText by remember { mutableStateOf("") }
     var netQuantityUnit by remember { mutableStateOf(ServingUnit.GRAMS) }
-    var caloriesText by remember { mutableStateOf("") }
-    var proteinText by remember { mutableStateOf("") }
-    var carbsText by remember { mutableStateOf("") }
-    var fatText by remember { mutableStateOf("") }
-    var saturatedFatText by remember { mutableStateOf("") }
-    var transFatText by remember { mutableStateOf("") }
-    var fiberText by remember { mutableStateOf("") }
-    var sugarText by remember { mutableStateOf("") }
-    var addedSugarsText by remember { mutableStateOf("") }
-    var sodiumText by remember { mutableStateOf("") }
-    var saltText by remember { mutableStateOf("") }
+    var caloriesText by remember {
+        mutableStateOf(existingEntry?.calculatedCalories?.toInt()?.toString() ?: "")
+    }
+    var proteinText by remember {
+        mutableStateOf(existingEntry?.calculatedProtein?.toString() ?: "")
+    }
+    var carbsText by remember {
+        mutableStateOf(existingEntry?.calculatedCarbs?.toString() ?: "")
+    }
+    var fatText by remember {
+        mutableStateOf(existingEntry?.calculatedFat?.toString() ?: "")
+    }
+    var saturatedFatText by remember {
+        mutableStateOf(existingEntry?.calculatedSaturatedFat?.toString() ?: "")
+    }
+    var transFatText by remember {
+        mutableStateOf(existingEntry?.calculatedTransFat?.toString() ?: "")
+    }
+    var fiberText by remember {
+        mutableStateOf(existingEntry?.calculatedFiber?.toString() ?: "")
+    }
+    var sugarText by remember {
+        mutableStateOf(existingEntry?.calculatedSugar?.toString() ?: "")
+    }
+    var addedSugarsText by remember {
+        mutableStateOf(existingEntry?.calculatedAddedSugars?.toString() ?: "")
+    }
+    var sodiumText by remember {
+        mutableStateOf(existingEntry?.calculatedSodiumMg?.toString() ?: "")
+    }
+    var saltText by remember {
+        mutableStateOf(existingEntry?.calculatedSaltG?.toString() ?: "")
+    }
     var fssaiLicenseText by remember { mutableStateOf("") }
     var basis by remember { mutableStateOf(NutritionBasis.PER_100_G) }
-    var portionText by remember { mutableStateOf("100") }
-    var portionUnit by remember { mutableStateOf(ServingUnit.GRAMS) }
-    var mealType by remember { mutableStateOf(initialMealType) }
+    var portionText by remember {
+        mutableStateOf(existingEntry?.quantity?.let { formatQuantity(it) } ?: "100")
+    }
+    var portionUnit by remember { mutableStateOf(existingEntry?.unit ?: ServingUnit.GRAMS) }
+    var mealType by remember { mutableStateOf(existingEntry?.mealType ?: initialMealType) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Manual Food Entry (India / FSSAI)") },
+        title = { Text(if (existingEntry != null) "Edit Food Entry" else "Manual Food Entry (India / FSSAI)") },
         text = {
             Column(
                 modifier = Modifier
@@ -1332,7 +1373,7 @@ fun ManualFoodDialog(
                 },
                 enabled = name.isNotBlank() && caloriesText.toIntOrNull() != null
             ) {
-                Text("Save & Log")
+                Text(if (existingEntry != null) "Update Entry" else "Save & Log")
             }
         },
         dismissButton = {

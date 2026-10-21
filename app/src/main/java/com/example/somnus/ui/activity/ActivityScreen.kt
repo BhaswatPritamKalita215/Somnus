@@ -21,7 +21,14 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Watch
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.health.connect.client.PermissionController
+import com.example.somnus.data.healthconnect.DefaultHealthConnectClientWrapper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -63,10 +70,23 @@ import java.util.Locale
 @Composable
 fun ActivityScreen(
     viewModel: ActivityViewModel,
+    onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val activityPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        viewModel.refreshHardwareTracker()
+    }
+
+    val healthConnectLauncher = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract()
+    ) {
+        viewModel.syncHealthConnect()
+    }
 
     LaunchedEffect(uiState.syncMessage) {
         uiState.syncMessage?.let { msg ->
@@ -84,7 +104,11 @@ fun ActivityScreen(
                         Icon(Icons.Default.Edit, contentDescription = "Edit Step Goal")
                     }
                     IconButton(
-                        onClick = { viewModel.syncHealthConnect() },
+                        onClick = {
+                            viewModel.syncHealthConnect(
+                                onPermissionRequired = { perms -> healthConnectLauncher.launch(perms) }
+                            )
+                        },
                         enabled = !uiState.isSyncing
                     ) {
                         if (uiState.isSyncing) {
@@ -97,6 +121,9 @@ fun ActivityScreen(
                         } else {
                             Icon(Icons.Default.Refresh, contentDescription = "Sync Health Connect")
                         }
+                    }
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 }
             )
@@ -137,8 +164,19 @@ fun ActivityScreen(
                     phoneStatus = uiState.phoneTrackerStatus,
                     isHcAvailable = uiState.isHealthConnectAvailable,
                     isSyncing = uiState.isSyncing,
-                    onSyncClick = { viewModel.syncHealthConnect() },
-                    onRefreshSensorClick = { viewModel.refreshHardwareTracker() }
+                    onSyncClick = {
+                        viewModel.syncHealthConnect(
+                            onPermissionRequired = { perms -> healthConnectLauncher.launch(perms) }
+                        )
+                    },
+                    onRefreshSensorClick = { viewModel.refreshHardwareTracker() },
+                    onRequestPhonePermissionClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                        } else {
+                            viewModel.refreshHardwareTracker()
+                        }
+                    }
                 )
             }
 
@@ -439,6 +477,7 @@ fun IntegrationStatusCard(
     isSyncing: Boolean,
     onSyncClick: () -> Unit,
     onRefreshSensorClick: () -> Unit,
+    onRequestPhonePermissionClick: () -> Unit = onRefreshSensorClick,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -473,9 +512,11 @@ fun IntegrationStatusCard(
                     )
                 }
 
-                if (phoneStatus == PhoneStepTrackerStatus.PERMISSION_REQUIRED ||
-                    phoneStatus == PhoneStepTrackerStatus.READY
-                ) {
+                if (phoneStatus == PhoneStepTrackerStatus.PERMISSION_REQUIRED) {
+                    Button(onClick = onRequestPhonePermissionClick) {
+                        Text("Grant Permission", style = MaterialTheme.typography.labelSmall)
+                    }
+                } else if (phoneStatus == PhoneStepTrackerStatus.READY) {
                     OutlinedButton(onClick = onRefreshSensorClick) {
                         Text("Refresh", style = MaterialTheme.typography.labelSmall)
                     }

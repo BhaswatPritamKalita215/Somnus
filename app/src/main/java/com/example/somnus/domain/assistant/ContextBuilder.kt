@@ -30,7 +30,8 @@ class ContextBuilder(
     private val stepRepository: StepRepository,
     private val foodLogRepository: FoodLogRepository,
     private val dashboardRepository: DashboardRepository,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    val maxInputTokens: Int = TokenBudgetConfig.MAX_INPUT_TOKENS
 ) {
 
     private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -168,15 +169,27 @@ class ContextBuilder(
             dataSections.add("Today ($currentDate) snapshot: Sleep=$sleepDur, Steps=%,d, Nutrition=%d kcal.".format(steps, cal))
         }
 
-        val compactData = dataSections.joinToString("\n")
+        var compactData = dataSections.joinToString("\n")
 
-        // 5. Bounded Conversation History (Latest 2 turns max)
-        val conversationHistory = recentMessages
-            .takeLast(4) // At most 2 user + 2 assistant messages
-            .joinToString("\n") { msg ->
-                val speaker = if (msg.role == MessageRole.USER) "User" else "Assistant"
-                "$speaker: ${msg.content.take(150)}" // truncate lengthy turns
-            }
+        // 5. Bounded Conversation History with Older Turn Summarisation
+        val olderTurns = if (recentMessages.size > 4) recentMessages.dropLast(4) else emptyList()
+        val olderSummary = if (olderTurns.isNotEmpty()) {
+            val topics = olderTurns
+                .filter { it.role == MessageRole.USER }
+                .map { it.content.trim().take(40) }
+                .distinct()
+            if (topics.isNotEmpty()) "Earlier topics discussed: ${topics.joinToString("; ")}" else null
+        } else null
+
+        val recentTurns = recentMessages.takeLast(4).map { msg ->
+            val speaker = if (msg.role == MessageRole.USER) "User" else "Assistant"
+            "$speaker: ${msg.content.take(120)}"
+        }
+
+        var conversationHistory = buildList {
+            if (olderSummary != null) add(olderSummary)
+            addAll(recentTurns)
+        }.joinToString("\n")
 
         val promptBuilder = StringBuilder()
         promptBuilder.append("### System\n").append(SYSTEM_PROMPT).append("\n\n")
@@ -187,8 +200,55 @@ class ContextBuilder(
         promptBuilder.append("### User\n").append(query).append("\n\n")
         promptBuilder.append("### Assistant\n")
 
-        val fullPrompt = promptBuilder.toString()
-        val estimatedTokens = TokenBudgetConfig.estimateTokens(fullPrompt)
+        var fullPrompt = promptBuilder.toString()
+        var estimatedTokens = TokenBudgetConfig.estimateTokens(fullPrompt)
+
+        // Enforce hard input-token budget
+        if (estimatedTokens > maxInputTokens) {
+            // Step 1: Drop prior conversation context if over budget
+            if (conversationHistory.isNotBlank()) {
+                conversationHistory = ""
+                fullPrompt = StringBuilder()
+                    .append("### System\n").append(SYSTEM_PROMPT).append("\n\n")
+                    .append("### Verified Data\n").append(compactData).append("\n\n")
+                    .append("### User\n").append(query).append("\n\n")
+                    .append("### Assistant\n")
+                    .toString()
+                estimatedTokens = TokenBudgetConfig.estimateTokens(fullPrompt)
+            }
+
+            // Step 2: If still over budget, clamp verified data section
+            if (estimatedTokens > maxInputTokens) {
+                val fixedPrompt = StringBuilder()
+                    .append("### System\n").append(SYSTEM_PROMPT).append("\n\n")
+                    .append("### Verified Data\n\n\n")
+                    .append("### User\n").append(query).append("\n\n")
+                    .append("### Assistant\n")
+                    .toString()
+                val overheadTokens = TokenBudgetConfig.estimateTokens(fixedPrompt)
+                val allowedDataTokens = maxInputTokens - overheadTokens
+                if (allowedDataTokens > 0) {
+                    val allowedChars = (allowedDataTokens * TokenBudgetConfig.CHARS_PER_TOKEN_HEURISTIC).toInt()
+                    compactData = compactData.take(allowedChars) + "…"
+                } else {
+                    compactData = ""
+                }
+                fullPrompt = StringBuilder()
+                    .append("### System\n").append(SYSTEM_PROMPT).append("\n\n")
+                    .append("### Verified Data\n").append(compactData).append("\n\n")
+                    .append("### User\n").append(query).append("\n\n")
+                    .append("### Assistant\n")
+                    .toString()
+                estimatedTokens = TokenBudgetConfig.estimateTokens(fullPrompt)
+            }
+
+            // Step 3: Hard budget clamp guaranteeing estimatedTokens <= maxInputTokens under any budget
+            if (estimatedTokens > maxInputTokens) {
+                val allowedChars = (maxInputTokens * TokenBudgetConfig.CHARS_PER_TOKEN_HEURISTIC).toInt()
+                fullPrompt = fullPrompt.take(allowedChars)
+                estimatedTokens = TokenBudgetConfig.estimateTokens(fullPrompt)
+            }
+        }
 
         return PromptContext(
             systemPrompt = SYSTEM_PROMPT,

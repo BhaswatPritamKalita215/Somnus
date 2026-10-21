@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -46,6 +47,7 @@ import com.example.somnus.ui.scanner.BarcodeScannerView
 @Composable
 fun NutritionScreen(
     viewModel: NutritionViewModel,
+    onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -76,7 +78,16 @@ fun NutritionScreen(
         topBar = {
             SomnusTopBar(
                 title = "Nutrition & Diet",
-                subtitle = "Scan-first calorie & nutrient tracking"
+                subtitle = "Scan-first calorie & nutrient tracking",
+                actions = {
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             )
         },
         floatingActionButton = {
@@ -158,6 +169,7 @@ fun NutritionScreen(
                             mealType = mealType,
                             entries = entriesByMeal[mealType] ?: emptyList(),
                             onAddClick = { viewModel.openManualEntry(null, mealType) },
+                            onEditEntry = { entry -> viewModel.openEditEntry(entry) },
                             onDeleteEntry = { id -> viewModel.deleteLogEntry(id) }
                         )
                     }
@@ -239,6 +251,34 @@ fun NutritionScreen(
                                 portionQuantity = portionVal,
                                 portionUnit = portionUnit,
                                 mealType = meal
+                            )
+                        },
+                        onDismiss = { viewModel.dismissScanState() }
+                    )
+                }
+
+                is ScanState.EditEntry -> {
+                    ManualFoodDialog(
+                        existingEntry = scan.entry,
+                        onSaveAndLog = { name, _, brand, _, _, _, _, _, _, _, cal, prot, carb, fat, satFat, transFat, fiber, sugar, addedSugars, sodium, salt, _, _, portionVal, portionUnit, meal ->
+                            viewModel.updateFoodLogEntry(
+                                entryId = scan.entry.id,
+                                name = name,
+                                brand = brand,
+                                mealType = meal,
+                                portionQuantity = portionVal,
+                                portionUnit = portionUnit,
+                                calories = cal,
+                                protein = prot,
+                                carbs = carb,
+                                fat = fat,
+                                saturatedFat = satFat,
+                                transFat = transFat,
+                                fiber = fiber,
+                                sugar = sugar,
+                                addedSugars = addedSugars,
+                                sodium = sodium,
+                                salt = salt
                             )
                         },
                         onDismiss = { viewModel.dismissScanState() }

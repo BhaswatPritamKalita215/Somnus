@@ -156,4 +156,8 @@ class FakeAssistantRepository : AssistantRepository {
     override fun resetDiagnostics() {
         _diagnostics.value = AssistantDiagnostics()
     }
+
+    override fun invalidateCache(domain: com.example.somnus.domain.assistant.DataReferenceDomain?) {
+        // no-op for fake
+    }
 }

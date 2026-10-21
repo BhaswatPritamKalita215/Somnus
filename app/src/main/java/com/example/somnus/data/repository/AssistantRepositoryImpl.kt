@@ -30,6 +30,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+
 /**
  * Production implementation of [AssistantRepository].
  *
@@ -42,8 +45,38 @@ class AssistantRepositoryImpl(
     private val contextBuilder: ContextBuilder,
     private val modelProvider: AssistantModelProvider,
     private val assistantCache: AssistantCache,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val sleepSessionRepository: SleepSessionRepository? = null,
+    private val stepRepository: StepRepository? = null,
+    private val foodLogRepository: FoodLogRepository? = null,
+    private val externalScope: CoroutineScope? = null
 ) : AssistantRepository {
+
+    init {
+        externalScope?.let { scope ->
+            sleepSessionRepository?.completedSessions?.let { flow ->
+                scope.launch {
+                    flow.collect {
+                        invalidateCache(DataReferenceDomain.SLEEP)
+                    }
+                }
+            }
+            stepRepository?.getCheckpoint()?.let { flow ->
+                scope.launch {
+                    flow.collect {
+                        invalidateCache(DataReferenceDomain.STEPS)
+                    }
+                }
+            }
+            foodLogRepository?.getRecentEntries()?.let { flow ->
+                scope.launch {
+                    flow.collect {
+                        invalidateCache(DataReferenceDomain.NUTRITION)
+                    }
+                }
+            }
+        }
+    }
 
     private val _diagnostics = MutableStateFlow(AssistantDiagnostics())
     override val diagnosticsFlow: Flow<AssistantDiagnostics> = _diagnostics.asStateFlow()
@@ -126,11 +159,20 @@ class AssistantRepositoryImpl(
                 dataReferences = queryResult.dataReferences
             )
 
-            // Cache deterministic local result
+            // Cache deterministic local result with domain tag
+            val domainTag = when (routed.intentType) {
+                IntentType.TODAY_STEPS, IntentType.HISTORICAL_STEPS -> DataReferenceDomain.STEPS
+                IntentType.LATEST_SLEEP, IntentType.SLEEP_HISTORY -> DataReferenceDomain.SLEEP
+                IntentType.TODAY_NUTRITION, IntentType.NUTRITION_HISTORY -> DataReferenceDomain.NUTRITION
+                IntentType.ENERGY_EXPENDITURE -> DataReferenceDomain.ENERGY
+                else -> DataReferenceDomain.SYSTEM
+            }
+
             assistantCache.put(
                 key = cacheKey,
                 response = sanitized.safeContent,
-                dataReferences = queryResult.dataReferences
+                dataReferences = queryResult.dataReferences,
+                domainTag = domainTag
             )
 
             dao.insertMessage(assistantMsg.toEntity())
@@ -146,11 +188,35 @@ class AssistantRepositoryImpl(
         }
 
         // 5. Complex Synthesis: Compact Context Construction & Model Provider
-        updateDiagnostics { copy(modelInvocations = modelInvocations + 1) }
-
         val recentMessages = dao.getAllMessagesSync().takeLast(4).map { it.toDomain() }
         val promptContext = contextBuilder.buildPromptContext(trimmedQuery, recentMessages, currentDate)
 
+        // Check on-device model availability and gracefully degrade if unsupported on this hardware
+        if (!modelProvider.isAvailable) {
+            val latency = System.currentTimeMillis() - queryStartTime
+            updateDiagnostics {
+                copy(
+                    localHandledRequests = localHandledRequests + 1,
+                    totalLatencyMs = totalLatencyMs + latency
+                )
+            }
+
+            val degradationMsg = AssistantMessage(
+                id = UUID.randomUUID().toString(),
+                role = MessageRole.ASSISTANT,
+                content = "AI features unavailable on this device. On-device neural inference requires hardware-accelerated model support (such as Gemini Nano via Android AICore), which is not available on this device.\n\nYour verified local health data remains safe:\n${promptContext.compactDataContext}",
+                wasLocalHandled = true,
+                latencyMs = latency,
+                intentType = routed.intentType,
+                dataReferences = promptContext.dataReferences,
+                isError = false
+            )
+            dao.insertMessage(degradationMsg.toEntity())
+            emit(degradationMsg)
+            return@flow
+        }
+
+        updateDiagnostics { copy(modelInvocations = modelInvocations + 1) }
         updateDiagnostics { copy(totalInputTokens = totalInputTokens + promptContext.estimatedInputTokens) }
 
         val messageId = UUID.randomUUID().toString()
@@ -192,10 +258,19 @@ class AssistantRepositoryImpl(
                 isError = parsed.isError
             )
 
+            val synthesisDomainTag = when (routed.intentType) {
+                IntentType.TODAY_STEPS, IntentType.HISTORICAL_STEPS -> DataReferenceDomain.STEPS
+                IntentType.LATEST_SLEEP, IntentType.SLEEP_HISTORY -> DataReferenceDomain.SLEEP
+                IntentType.TODAY_NUTRITION, IntentType.NUTRITION_HISTORY -> DataReferenceDomain.NUTRITION
+                IntentType.ENERGY_EXPENDITURE -> DataReferenceDomain.ENERGY
+                else -> DataReferenceDomain.SYSTEM
+            }
+
             assistantCache.put(
                 key = cacheKey,
                 response = sanitized.safeContent,
-                dataReferences = parsed.dataReferences
+                dataReferences = parsed.dataReferences,
+                domainTag = synthesisDomainTag
             )
 
             dao.insertMessage(finalMessage.toEntity())
@@ -216,7 +291,7 @@ class AssistantRepositoryImpl(
             val fallbackMsg = AssistantMessage(
                 id = messageId,
                 role = MessageRole.ASSISTANT,
-                content = "I could not complete model synthesis on this device. However, your data remains safe locally:\n\n${promptContext.compactDataContext}",
+                content = "AI features unavailable on this device (${e.message ?: "inference error"}). However, your data remains safe locally:\n\n${promptContext.compactDataContext}",
                 wasLocalHandled = true,
                 latencyMs = latency,
                 intentType = routed.intentType,
@@ -240,6 +315,14 @@ class AssistantRepositoryImpl(
 
     override fun resetDiagnostics() {
         _diagnostics.value = AssistantDiagnostics()
+    }
+
+    override fun invalidateCache(domain: DataReferenceDomain?) {
+        if (domain == null) {
+            assistantCache.clear()
+        } else {
+            assistantCache.invalidateDomain(domain)
+        }
     }
 
     private fun updateDiagnostics(transform: AssistantDiagnostics.() -> AssistantDiagnostics) {

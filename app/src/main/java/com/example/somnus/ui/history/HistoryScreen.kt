@@ -44,16 +44,19 @@ import com.example.somnus.ui.components.SomnusTopBar
 fun HistoryScreen(
     viewModel: HistoryViewModel,
     onNavigateToDetail: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showTopBar: Boolean = true
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
-            SomnusTopBar(
-                title = "Sleep History",
-                subtitle = "Chronological Log"
-            )
+            if (showTopBar) {
+                SomnusTopBar(
+                    title = "Sleep History",
+                    subtitle = "Chronological Log"
+                )
+            }
         },
         modifier = modifier
     ) { paddingValues ->

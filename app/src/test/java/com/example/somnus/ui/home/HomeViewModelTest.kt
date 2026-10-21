@@ -218,4 +218,88 @@ class HomeViewModelTest {
         assertEquals("test_insight", state.crossMetricInsights[0].id)
         assertEquals(CoverageCompletenessTier.MODERATE, state.coverageSummary?.completenessTier)
     }
+
+    @Test
+    fun confirmEndSession_setsPendingCheckInSessionId() = runTest(testDispatcher) {
+        val viewModel = HomeViewModel(sessionManager, repository)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        viewModel.startSession()
+        advanceUntilIdle()
+        val active = repository.getActiveSessionOneShot()!!
+
+        viewModel.promptEndSession()
+        viewModel.confirmEndSession("Finished")
+        advanceUntilIdle()
+
+        assertEquals(active.id, viewModel.uiState.value.pendingCheckInSessionId)
+    }
+
+    @Test
+    fun saveMorningCheckIn_persistsAndClearsPending() = runTest(testDispatcher) {
+        val checkInRepo = com.example.somnus.data.repository.SleepCheckInRepositoryImpl(db.sleepCheckInDao(), testDispatcher)
+        val viewModel = HomeViewModel(
+            sessionManager = sessionManager,
+            repository = repository,
+            sleepCheckInRepository = checkInRepo
+        )
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        viewModel.startSession()
+        advanceUntilIdle()
+        val active = repository.getActiveSessionOneShot()!!
+
+        viewModel.promptEndSession()
+        viewModel.confirmEndSession()
+        advanceUntilIdle()
+
+        assertEquals(active.id, viewModel.uiState.value.pendingCheckInSessionId)
+
+        viewModel.saveMorningCheckIn(active.id, 5, "Great", 4, "Woke up refreshed")
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.pendingCheckInSessionId)
+        val saved = checkInRepo.getCheckInForSessionSync(active.id)
+        assertNotNull(saved)
+        assertEquals(5, saved?.moodScore)
+        assertEquals("Great", saved?.moodLabel)
+        assertEquals(4, saved?.restedScore)
+        assertEquals("Woke up refreshed", saved?.notes)
+    }
+
+    @Test
+    fun skipMorningCheckIn_clearsPendingWithoutSaving() = runTest(testDispatcher) {
+        val checkInRepo = com.example.somnus.data.repository.SleepCheckInRepositoryImpl(db.sleepCheckInDao(), testDispatcher)
+        val viewModel = HomeViewModel(
+            sessionManager = sessionManager,
+            repository = repository,
+            sleepCheckInRepository = checkInRepo
+        )
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        viewModel.startSession()
+        advanceUntilIdle()
+        val active = repository.getActiveSessionOneShot()!!
+
+        viewModel.promptEndSession()
+        viewModel.confirmEndSession()
+        advanceUntilIdle()
+
+        assertEquals(active.id, viewModel.uiState.value.pendingCheckInSessionId)
+
+        viewModel.skipMorningCheckIn()
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.pendingCheckInSessionId)
+        assertNull(checkInRepo.getCheckInForSessionSync(active.id))
+    }
 }

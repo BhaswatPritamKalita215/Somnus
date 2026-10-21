@@ -28,7 +28,8 @@ import com.example.somnus.ui.components.SomnusTopBar
 @Composable
 fun InsightsScreen(
     viewModel: InsightsViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showTopBar: Boolean = true
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -49,10 +50,12 @@ fun InsightsScreen(
 
     Scaffold(
         topBar = {
-            SomnusTopBar(
-                title = "Sleep Insights",
-                subtitle = "SOL & PSQI Instruments"
-            )
+            if (showTopBar) {
+                SomnusTopBar(
+                    title = "Sleep Insights",
+                    subtitle = "SOL & PSQI Instruments"
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = modifier
@@ -99,12 +102,6 @@ fun InsightsScreen(
                     InsightsTab.SOL -> {
                         SolSection(
                             uiState = state,
-                            onSaveRecord = { date, minutes, method, srcId, deviceMeta, notes ->
-                                viewModel.saveSolRecord(date, minutes, method, srcId, deviceMeta, null, null, notes)
-                            },
-                            onSaveWithTimestamps = { attemptTime, onsetTime, date, method, notes ->
-                                viewModel.calculateAndSaveSolFromTimestamps(attemptTime, onsetTime, date, method, notes)
-                            },
                             onDeleteRecord = { id -> viewModel.deleteSolRecord(id) }
                         )
                     }

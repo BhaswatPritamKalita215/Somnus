@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -24,6 +25,9 @@ interface FoodLogDao {
     @Query("SELECT * FROM food_log_entries ORDER BY loggedAt DESC LIMIT :limit")
     fun getRecentEntries(limit: Int = 20): Flow<List<FoodLogEntryEntity>>
 
+    @Query("SELECT * FROM food_log_entries WHERE id = :id LIMIT 1")
+    suspend fun getEntryById(id: String): FoodLogEntryEntity?
+
     @Query("SELECT * FROM food_log_entries WHERE externalRecordId = :externalRecordId LIMIT 1")
     suspend fun getEntryByExternalRecordId(externalRecordId: String): FoodLogEntryEntity?
 
@@ -32,6 +36,9 @@ interface FoodLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(entries: List<FoodLogEntryEntity>)
+
+    @Update
+    suspend fun update(entry: FoodLogEntryEntity)
 
     @Query("DELETE FROM food_log_entries WHERE id = :id")
     suspend fun deleteById(id: String)

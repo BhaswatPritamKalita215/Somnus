@@ -202,12 +202,12 @@ class ContextBuilderTest {
     }
 
     @Test
-    fun buildPromptContext_truncatesConversationHistory() = runTest(testDispatcher) {
+    fun buildPromptContext_truncatesConversationHistoryAndSummarisesOlderTurns() = runTest(testDispatcher) {
         val manyMessages = (1..10).map { i ->
             AssistantMessage(
                 id = "m-$i",
                 role = if (i % 2 == 1) MessageRole.USER else MessageRole.ASSISTANT,
-                content = "turn $i: user message about health data.",
+                content = "turn $i: user topic $i",
                 timestamp = Instant.now()
             )
         }
@@ -218,9 +218,34 @@ class ContextBuilderTest {
             currentDate = testDate
         )
 
-        // Only the last 2-3 turns should be retained
-        assertFalse(promptContext.fullPrompt.contains("turn 1:"))
-        assertFalse(promptContext.fullPrompt.contains("turn 2:"))
+        // Raw verbose earlier turns are not echoed
+        assertFalse(promptContext.fullPrompt.contains("Assistant: turn 2:"))
+        // Older turns are summarised
+        assertTrue(promptContext.fullPrompt.contains("Earlier topics discussed:"))
+        // Recent turns are preserved
         assertTrue(promptContext.fullPrompt.contains("turn 10:"))
+    }
+
+    @Test
+    fun buildPromptContext_configurableTokenBudget_strictlyEnforcesCustomBudget() = runTest(testDispatcher) {
+        val tightBudgetBuilder = ContextBuilder(
+            sleepSessionRepository = sleepSessionRepository,
+            solRepository = solRepository,
+            stepRepository = stepRepository,
+            foodLogRepository = foodLogRepository,
+            dashboardRepository = dashboardRepository,
+            userPreferencesRepository = preferencesRepository,
+            maxInputTokens = 120
+        )
+
+        val promptContext = tightBudgetBuilder.buildPromptContext(
+            query = "Provide a comprehensive synthesis of my sleep and step habits across the entire month",
+            currentDate = testDate
+        )
+
+        assertTrue(
+            "Estimated tokens must be <= 120, got ${promptContext.estimatedInputTokens}",
+            promptContext.estimatedInputTokens <= 120
+        )
     }
 }

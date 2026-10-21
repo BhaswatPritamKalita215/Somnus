@@ -24,9 +24,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         StepCounterCheckpointEntity::class,
         FoodProductEntity::class,
         FoodLogEntryEntity::class,
-        AssistantMessageEntity::class
+        AssistantMessageEntity::class,
+        SleepCheckInEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class SomnusDatabase : RoomDatabase() {
@@ -39,6 +40,7 @@ abstract class SomnusDatabase : RoomDatabase() {
     abstract fun foodProductDao(): FoodProductDao
     abstract fun foodLogDao(): FoodLogDao
     abstract fun assistantMessageDao(): AssistantMessageDao
+    abstract fun sleepCheckInDao(): SleepCheckInDao
 
     /**
      * Atomically clears all sleep-tracking, activity, nutrition, and assistant data tables in a single database transaction.
@@ -46,6 +48,7 @@ abstract class SomnusDatabase : RoomDatabase() {
      */
     @androidx.room.Transaction
     open suspend fun clearAllDataTables() {
+        sleepCheckInDao().deleteAll()
         assistantMessageDao().deleteAll()
         foodLogDao().deleteAll()
         foodProductDao().deleteAll()
@@ -303,9 +306,34 @@ abstract class SomnusDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 6 to version 7
+         * adding sleep_check_ins table for original post-sleep morning check-in self-reports.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `sleep_check_ins` (
+                        `id` TEXT NOT NULL,
+                        `sessionId` TEXT NOT NULL,
+                        `moodScore` INTEGER,
+                        `moodLabel` TEXT,
+                        `restedScore` INTEGER,
+                        `notes` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        `isSelfReported` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`),
+                        FOREIGN KEY(`sessionId`) REFERENCES `sleep_sessions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_sleep_check_ins_sessionId` ON `sleep_check_ins` (`sessionId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sleep_check_ins_createdAt` ON `sleep_check_ins` (`createdAt`)")
+            }
+        }
+
+        /**
          * List of explicit Room migrations.
          */
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
 
         fun buildDatabase(context: Context, databaseName: String = DATABASE_NAME): SomnusDatabase {
             return Room.databaseBuilder(

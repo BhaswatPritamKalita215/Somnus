@@ -56,8 +56,6 @@ fun PsqiSection(
     onDeleteAssessment: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showCustomDialog by remember { mutableStateOf(false) }
-
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -85,8 +83,7 @@ fun PsqiSection(
             SyntheticRunnerCard(
                 onRunFixture = { fixture, name ->
                     onScoreAssessment(fixture, "Synthetic-Fixture-v1", "Past 1 Month", "Tested via $name")
-                },
-                onOpenCustom = { showCustomDialog = true }
+                }
             )
         }
 
@@ -97,16 +94,6 @@ fun PsqiSection(
         PsqiHistoryList(
             assessments = uiState.psqiAssessments,
             onDeleteAssessment = onDeleteAssessment
-        )
-    }
-
-    if (showCustomDialog) {
-        CustomPsqiDialog(
-            onDismiss = { showCustomDialog = false },
-            onSave = { responses ->
-                showCustomDialog = false
-                onScoreAssessment(responses, "Custom-Input-v1", "Past 1 Month", "Custom test input")
-            }
         )
     }
 }
@@ -148,7 +135,6 @@ private fun InstrumentNoticeCard(modifier: Modifier = Modifier) {
 @Composable
 private fun SyntheticRunnerCard(
     onRunFixture: (PsqiResponses, String) -> Unit,
-    onOpenCustom: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -200,14 +186,6 @@ private fun SyntheticRunnerCard(
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Score 'Max Severity' (Expected: 21 / 21)")
-                }
-
-                OutlinedButton(
-                    onClick = onOpenCustom,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Enter Custom Numerical Responses")
                 }
             }
         }
@@ -398,96 +376,3 @@ private fun PsqiHistoryList(
     }
 }
 
-@Composable
-private fun CustomPsqiDialog(
-    onDismiss: () -> Unit,
-    onSave: (PsqiResponses) -> Unit
-) {
-    var bedTime by remember { mutableStateOf("23:00") }
-    var wakeTime by remember { mutableStateOf("07:00") }
-    var latencyMinutes by remember { mutableStateOf("25") }
-    var sleepHours by remember { mutableStateOf("7.0") }
-    var q5a by remember { mutableStateOf("1") }
-    var disturbanceSum by remember { mutableStateOf("3") }
-    var q6Meds by remember { mutableStateOf("0") }
-    var q7Sleepy by remember { mutableStateOf("1") }
-    var q8Enthusiasm by remember { mutableStateOf("1") }
-    var q9Quality by remember { mutableStateOf("1") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Custom PSQI Numerical Inputs") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = bedTime,
-                    onValueChange = { bedTime = it },
-                    label = { Text("Bed Time (HH:mm)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = wakeTime,
-                    onValueChange = { wakeTime = it },
-                    label = { Text("Wake Time (HH:mm)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = latencyMinutes,
-                    onValueChange = { latencyMinutes = it },
-                    label = { Text("Latency Minutes (Item 2)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = sleepHours,
-                    onValueChange = { sleepHours = it },
-                    label = { Text("Actual Sleep Hours (Item 4)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = q5a,
-                    onValueChange = { q5a = it },
-                    label = { Text("Trouble <=30m (Item 5a: 0-3)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = q6Meds,
-                    onValueChange = { q6Meds = it },
-                    label = { Text("Sleep Meds (Item 6: 0-3)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = q9Quality,
-                    onValueChange = { q9Quality = it },
-                    label = { Text("Overall Quality (Item 9: 0-3)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val responses = PsqiResponses(
-                        bedTime = bedTime,
-                        wakeTime = wakeTime,
-                        latencyMinutes = latencyMinutes.toIntOrNull() ?: 20,
-                        actualSleepHours = sleepHours.toDoubleOrNull() ?: 7.0,
-                        q5a = q5a.toIntOrNull() ?: 0,
-                        q5b = 0, q5c = 0, q5d = 0, q5e = 0, q5f = 0, q5g = 0, q5h = 0, q5i = 0, q5j = 0,
-                        q6 = q6Meds.toIntOrNull() ?: 0,
-                        q7 = q7Sleepy.toIntOrNull() ?: 0,
-                        q8 = q8Enthusiasm.toIntOrNull() ?: 0,
-                        q9 = q9Quality.toIntOrNull() ?: 0
-                    )
-                    onSave(responses)
-                }
-            ) {
-                Text("Score & Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}

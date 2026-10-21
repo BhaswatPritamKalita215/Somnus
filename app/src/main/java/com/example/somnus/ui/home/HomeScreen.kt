@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -65,6 +66,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.somnus.domain.analysis.DurationCalculator
 import com.example.somnus.domain.dashboard.CoverageCompletenessTier
@@ -93,6 +101,7 @@ fun HomeScreen(
     onNavigateToNutrition: () -> Unit = {},
     onNavigateToAnalytics: () -> Unit = {},
     onNavigateToAssistant: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -103,6 +112,35 @@ fun HomeScreen(
     var recoveryNotes by remember { mutableStateOf("") }
     var completionNotes by remember { mutableStateOf("") }
     var endingDuration by remember { mutableStateOf<Duration?>(null) }
+
+    val context = LocalContext.current
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        viewModel.startSession()
+    }
+
+    val healthConnectLauncher = rememberLauncherForActivityResult(
+        contract = androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()
+    ) {
+        viewModel.syncHealthConnect()
+    }
+
+    val onStartTrackingClick: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!hasPermission) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                viewModel.startSession()
+            }
+        } else {
+            viewModel.startSession()
+        }
+    }
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let { error ->
@@ -125,12 +163,12 @@ fun HomeScreen(
                 subtitle = "Unified Health Dashboard",
                 actions = {
                     IconButton(
-                        onClick = onNavigateToAssistant
+                        onClick = onNavigateToSettings
                     ) {
                         Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "Local rules assistant",
-                            tint = MaterialTheme.colorScheme.primary
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -164,7 +202,11 @@ fun HomeScreen(
                         onPreviousDay = { viewModel.stepDate(-1) },
                         onNextDay = { viewModel.stepDate(1) },
                         onSelectToday = { viewModel.selectToday() },
-                        onSyncHealthConnect = { viewModel.syncHealthConnect() }
+                        onSyncHealthConnect = {
+                            viewModel.syncHealthConnect(
+                                onPermissionRequired = { perms -> healthConnectLauncher.launch(perms) }
+                            )
+                        }
                     )
                 }
 
@@ -175,6 +217,8 @@ fun HomeScreen(
                         ActiveSessionCard(
                             session = active,
                             isStale = state.isSessionStale,
+                            isInterrupted = state.isTrackingInterrupted,
+                            onResumeTrackingClick = { viewModel.resumeTracking() },
                             onEndClick = { duration ->
                                 endingDuration = duration
                                 viewModel.promptEndSession()
@@ -184,7 +228,7 @@ fun HomeScreen(
                         )
                     } else {
                         IdleSessionCard(
-                            onStartClick = { viewModel.startSession() }
+                            onStartClick = onStartTrackingClick
                         )
                     }
                 }
@@ -358,6 +402,19 @@ fun HomeScreen(
                 OutlinedButton(onClick = { showRecoveryDialog = false }) {
                     Text("Cancel")
                 }
+            }
+        )
+    }
+
+    // Morning check-in dialog after ending sleep session
+    state.pendingCheckInSessionId?.let { sessionId ->
+        MorningCheckInDialog(
+            sessionId = sessionId,
+            onSave = { moodScore, moodLabel, restedScore, notes ->
+                viewModel.saveMorningCheckIn(sessionId, moodScore, moodLabel, restedScore, notes)
+            },
+            onSkip = {
+                viewModel.skipMorningCheckIn()
             }
         )
     }
@@ -1227,6 +1284,8 @@ fun IdleSessionCard(
 fun ActiveSessionCard(
     session: SleepSession,
     isStale: Boolean,
+    isInterrupted: Boolean = false,
+    onResumeTrackingClick: () -> Unit = {},
     onEndClick: (Duration) -> Unit,
     onRecoverClick: () -> Unit,
     onDiscardClick: () -> Unit,
@@ -1245,12 +1304,28 @@ fun ActiveSessionCard(
 
     val formattedDuration = DurationCalculator.formatDuration(elapsedDuration)
 
+    val containerColor = when {
+        isStale -> MaterialTheme.colorScheme.errorContainer
+        isInterrupted -> MaterialTheme.colorScheme.tertiaryContainer
+        else -> MaterialTheme.colorScheme.primaryContainer
+    }
+
+    val contentColor = when {
+        isStale -> MaterialTheme.colorScheme.onErrorContainer
+        isInterrupted -> MaterialTheme.colorScheme.onTertiaryContainer
+        else -> MaterialTheme.colorScheme.onPrimaryContainer
+    }
+
+    val titleText = when {
+        isStale -> "Tracking Warning (Stale)"
+        isInterrupted -> "Tracking Interrupted"
+        else -> "Overnight Tracking Active"
+    }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isStale) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
-        )
+        colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -1259,13 +1334,13 @@ fun ActiveSessionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatusDot(isActive = true)
+                    StatusDot(isActive = !isInterrupted)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isStale) "Tracking Warning" else "Tracking Active",
+                        text = titleText,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (isStale) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                        color = contentColor
                     )
                 }
 
@@ -1276,7 +1351,7 @@ fun ActiveSessionCard(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Discard Session",
-                        tint = if (isStale) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                        tint = contentColor
                     )
                 }
             }
@@ -1288,10 +1363,38 @@ fun ActiveSessionCard(
                 style = MaterialTheme.typography.headlineLarge,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
-                color = if (isStale) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                color = contentColor
             )
 
-            if (isStale) {
+            if (isInterrupted) {
+                Spacer(modifier = Modifier.height(6.dp))
+                val wasRebooted = remember(session.startTime) {
+                    try {
+                        val bootTime = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime()
+                        session.startTime.toEpochMilli() < bootTime
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (wasRebooted) {
+                            "Phone tracking was interrupted by a device reboot. Your session is preserved."
+                        } else {
+                            "Phone tracking was stopped (e.g. system process reclamation). Your session is preserved."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = contentColor
+                    )
+                }
+            } else if (isStale) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -1304,7 +1407,7 @@ fun ActiveSessionCard(
                     Text(
                         text = "Session exceeds 16 hours. You can recover with estimated duration.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
+                        color = contentColor
                     )
                 }
             }
@@ -1312,6 +1415,21 @@ fun ActiveSessionCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (isInterrupted) {
+                    Button(
+                        onClick = onResumeTrackingClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Resume")
+                    }
+                }
+
                 Button(
                     onClick = { onEndClick(elapsedDuration) },
                     colors = ButtonDefaults.buttonColors(

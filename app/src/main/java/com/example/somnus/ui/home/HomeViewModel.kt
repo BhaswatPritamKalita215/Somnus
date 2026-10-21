@@ -11,6 +11,7 @@ import com.example.somnus.domain.dashboard.DashboardDayData
 import com.example.somnus.domain.dashboard.DataCoverageSummary
 import com.example.somnus.domain.model.SleepSession
 import com.example.somnus.session.SessionManager
+import com.example.somnus.session.SleepTrackingController
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -37,7 +38,11 @@ data class HomeUiState(
     val feedbackMessage: String? = null,
     val showEndConfirmation: Boolean = false,
     val isSessionStale: Boolean = false,
-    val isSyncing: Boolean = false
+    val isSyncing: Boolean = false,
+    val isTrackingServiceRunning: Boolean = false,
+    val isTrackingInterrupted: Boolean = false,
+    val isStartingTracking: Boolean = false,
+    val pendingCheckInSessionId: String? = null
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -45,7 +50,9 @@ class HomeViewModel(
     private val sessionManager: SessionManager,
     private val repository: SleepSessionRepository,
     private val dashboardRepository: DashboardRepository? = null,
-    private val healthConnectManager: HealthConnectManager? = null
+    private val healthConnectManager: HealthConnectManager? = null,
+    private val sleepTrackingController: SleepTrackingController? = null,
+    private val sleepCheckInRepository: com.example.somnus.data.repository.SleepCheckInRepository? = null
 ) : ViewModel() {
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
@@ -67,6 +74,9 @@ class HomeViewModel(
         dashboardRepository?.observeDataCoverage(start, date) ?: flowOf(null)
     }
 
+    private val serviceRunningFlow = sleepTrackingController?.isServiceRunning ?: flowOf(false)
+    private val serviceInterruptedFlow = sleepTrackingController?.isTrackingInterrupted ?: flowOf(false)
+
     val uiState: StateFlow<HomeUiState> = combine(
         sessionManager.activeSession,
         repository.completedSessions,
@@ -74,6 +84,8 @@ class HomeViewModel(
         dayDataFlow,
         insightsFlow,
         coverageFlow,
+        serviceRunningFlow,
+        serviceInterruptedFlow,
         _uiStateInternal
     ) { values ->
         val activeSession = values[0] as SleepSession?
@@ -84,7 +96,12 @@ class HomeViewModel(
         @Suppress("UNCHECKED_CAST")
         val insights = values[4] as List<CrossMetricInsight>
         val coverage = values[5] as DataCoverageSummary?
-        val internalState = values[6] as HomeUiState
+        val serviceRunning = values[6] as Boolean
+        val serviceInterrupted = values[7] as Boolean
+        val internalState = values[8] as HomeUiState
+
+        val hasActive = activeSession != null && activeSession.isActive
+        val isInterrupted = hasActive && ((!serviceRunning && !internalState.isStartingTracking) || serviceInterrupted)
 
         internalState.copy(
             selectedDate = date,
@@ -94,7 +111,9 @@ class HomeViewModel(
             activeSession = activeSession,
             recentSessions = completed.take(5),
             isLoading = false,
-            isSessionStale = sessionManager.isCurrentSessionStale()
+            isSessionStale = sessionManager.isCurrentSessionStale(),
+            isTrackingServiceRunning = serviceRunning,
+            isTrackingInterrupted = isInterrupted
         )
     }.stateIn(
         scope = viewModelScope,
@@ -116,16 +135,40 @@ class HomeViewModel(
 
     fun startSession(notes: String? = null) {
         viewModelScope.launch {
-            _uiStateInternal.value = _uiStateInternal.value.copy(isLoading = true, errorMessage = null)
+            _uiStateInternal.value = _uiStateInternal.value.copy(
+                isLoading = true,
+                errorMessage = null,
+                isStartingTracking = true
+            )
             val result = sessionManager.startSession(notes)
             result.onFailure { error ->
                 _uiStateInternal.value = _uiStateInternal.value.copy(
                     isLoading = false,
+                    isStartingTracking = false,
                     errorMessage = error.message ?: "Failed to start sleep session"
                 )
-            }.onSuccess {
+            }.onSuccess { session ->
                 _uiStateInternal.value = _uiStateInternal.value.copy(isLoading = false)
+                try {
+                    sleepTrackingController?.startTracking(session.id, session.startTime, notes)
+                } catch (e: Exception) {
+                    _uiStateInternal.value = _uiStateInternal.value.copy(
+                        isStartingTracking = false,
+                        errorMessage = "Sleep session created, but background service could not start: ${e.message}"
+                    )
+                }
             }
+        }
+    }
+
+    fun resumeTracking() {
+        val active = sessionManager.activeSession.value ?: uiState.value.activeSession ?: return
+        try {
+            sleepTrackingController?.startTracking(active.id, active.startTime, active.notes)
+        } catch (e: Exception) {
+            _uiStateInternal.value = _uiStateInternal.value.copy(
+                errorMessage = "Failed to resume tracking: ${e.message}"
+            )
         }
     }
 
@@ -144,15 +187,17 @@ class HomeViewModel(
                 showEndConfirmation = false,
                 errorMessage = null
             )
+            sleepTrackingController?.stopTracking(notes)
             val result = sessionManager.endSession(notes)
             result.onFailure { error ->
                 _uiStateInternal.value = _uiStateInternal.value.copy(
                     isLoading = false,
                     errorMessage = error.message ?: "Failed to end sleep session"
                 )
-            }.onSuccess {
+            }.onSuccess { session ->
                 _uiStateInternal.value = _uiStateInternal.value.copy(
                     isLoading = false,
+                    pendingCheckInSessionId = session.id,
                     feedbackMessage = "Sleep session completed and recorded."
                 )
             }
@@ -166,6 +211,7 @@ class HomeViewModel(
                 showEndConfirmation = false,
                 errorMessage = null
             )
+            sleepTrackingController?.discardTracking()
             val result = sessionManager.discardActiveSession()
             result.onFailure { error ->
                 _uiStateInternal.value = _uiStateInternal.value.copy(
@@ -185,6 +231,7 @@ class HomeViewModel(
                 showEndConfirmation = false,
                 errorMessage = null
             )
+            sleepTrackingController?.stopTracking(notes)
             val result = sessionManager.recoverActiveSession(correctedEndTime, notes)
             result.onFailure { error ->
                 _uiStateInternal.value = _uiStateInternal.value.copy(
@@ -192,14 +239,34 @@ class HomeViewModel(
                     errorMessage = error.message ?: "Failed to recover session"
                 )
             }.onSuccess {
-                _uiStateInternal.value = _uiStateInternal.value.copy(isLoading = false)
+                _uiStateInternal.value = _uiStateInternal.value.copy(
+                    isLoading = false,
+                    feedbackMessage = "Stale session recovered."
+                )
             }
         }
     }
 
-    fun syncHealthConnect() {
+    fun syncHealthConnect(onPermissionRequired: ((Set<String>) -> Unit)? = null) {
         if (healthConnectManager == null) return
         viewModelScope.launch {
+            val availability = healthConnectManager.checkAvailability()
+            if (availability != com.example.somnus.data.healthconnect.HealthConnectAvailability.AVAILABLE) {
+                _uiStateInternal.value = _uiStateInternal.value.copy(
+                    isSyncing = false,
+                    feedbackMessage = "Health Connect: ${availability.description}"
+                )
+                return@launch
+            }
+
+            val hasSleepPerms = healthConnectManager.hasPermissions()
+            val allRequired = com.example.somnus.data.healthconnect.DefaultHealthConnectClientWrapper.REQUIRED_PERMISSIONS +
+                com.example.somnus.data.healthconnect.DefaultHealthConnectClientWrapper.STEP_PERMISSIONS
+            if (!hasSleepPerms && onPermissionRequired != null) {
+                onPermissionRequired(allRequired)
+                return@launch
+            }
+
             _uiStateInternal.value = _uiStateInternal.value.copy(isSyncing = true)
             val zone = ZoneId.systemDefault()
             val start = _selectedDate.value.minusDays(7).atStartOfDay(zone).toInstant()
@@ -207,14 +274,53 @@ class HomeViewModel(
             val sleepResult = healthConnectManager.syncSleepRecords(start, end)
             val stepResult = healthConnectManager.syncStepRecords(start, end)
 
-            val sleepCount = sleepResult.getOrNull()?.importedCount ?: 0
-            val stepCount = stepResult.getOrNull()?.importedCount ?: 0
+            val error = sleepResult.exceptionOrNull() ?: stepResult.exceptionOrNull()
+            if (error != null && sleepResult.isFailure && stepResult.isFailure) {
+                _uiStateInternal.value = _uiStateInternal.value.copy(
+                    isSyncing = false,
+                    errorMessage = "Health Connect sync failed: ${error.message}"
+                )
+            } else {
+                val sleepCount = sleepResult.getOrNull()?.importedCount ?: 0
+                val stepCount = stepResult.getOrNull()?.importedCount ?: 0
+                _uiStateInternal.value = _uiStateInternal.value.copy(
+                    isSyncing = false,
+                    feedbackMessage = "Health Connect synced: $sleepCount sleep records, $stepCount step records."
+                )
+            }
+        }
+    }
 
+    fun saveMorningCheckIn(
+        sessionId: String,
+        moodScore: Int?,
+        moodLabel: String?,
+        restedScore: Int?,
+        notes: String?
+    ) {
+        viewModelScope.launch {
+            if (moodScore != null || restedScore != null || notes != null) {
+                val checkIn = com.example.somnus.domain.model.SleepCheckIn(
+                    sessionId = sessionId,
+                    moodScore = moodScore,
+                    moodLabel = moodLabel,
+                    restedScore = restedScore,
+                    notes = notes,
+                    isSelfReported = true
+                )
+                sleepCheckInRepository?.saveCheckIn(checkIn)
+            }
             _uiStateInternal.value = _uiStateInternal.value.copy(
-                isSyncing = false,
-                feedbackMessage = "Health Connect synced: $sleepCount sleep records, $stepCount step records."
+                pendingCheckInSessionId = null,
+                feedbackMessage = "Morning check-in saved."
             )
         }
+    }
+
+    fun skipMorningCheckIn() {
+        _uiStateInternal.value = _uiStateInternal.value.copy(
+            pendingCheckInSessionId = null
+        )
     }
 
     fun clearError() {
@@ -230,7 +336,9 @@ class HomeViewModel(
             sessionManager: SessionManager,
             repository: SleepSessionRepository,
             dashboardRepository: DashboardRepository? = null,
-            healthConnectManager: HealthConnectManager? = null
+            healthConnectManager: HealthConnectManager? = null,
+            sleepTrackingController: SleepTrackingController? = null,
+            sleepCheckInRepository: com.example.somnus.data.repository.SleepCheckInRepository? = null
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -238,7 +346,9 @@ class HomeViewModel(
                     sessionManager = sessionManager,
                     repository = repository,
                     dashboardRepository = dashboardRepository,
-                    healthConnectManager = healthConnectManager
+                    healthConnectManager = healthConnectManager,
+                    sleepTrackingController = sleepTrackingController,
+                    sleepCheckInRepository = sleepCheckInRepository
                 ) as T
             }
         }

@@ -69,6 +69,14 @@ class FoodLogRepositoryImpl(
         foodLogDao.insert(FoodLogEntryEntity.fromDomain(entry))
     }
 
+    override suspend fun updateEntry(entry: FoodLogEntry) = withContext(ioDispatcher) {
+        foodLogDao.update(FoodLogEntryEntity.fromDomain(entry))
+    }
+
+    override suspend fun getEntryById(id: String): FoodLogEntry? = withContext(ioDispatcher) {
+        foodLogDao.getEntryById(id)?.toDomain()
+    }
+
     override suspend fun deleteEntry(id: String) = withContext(ioDispatcher) {
         foodLogDao.deleteById(id)
     }

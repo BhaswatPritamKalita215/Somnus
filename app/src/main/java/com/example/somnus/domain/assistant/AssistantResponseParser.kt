@@ -10,7 +10,8 @@ package com.example.somnus.domain.assistant
  */
 object AssistantResponseParser {
 
-    private const val MAX_OUTPUT_WORDS = 160
+    private const val MAX_OUTPUT_WORDS = 150
+    private const val HARD_MAX_TOKENS = TokenBudgetConfig.MAX_OUTPUT_TOKENS // 200
 
     fun parseAndValidate(
         rawOutput: String,
@@ -28,10 +29,17 @@ object AssistantResponseParser {
 
         // Bounded length: truncate excessive generation
         val words = trimmed.split("\\s+".toRegex())
-        val boundedText = if (words.size > MAX_OUTPUT_WORDS) {
+        var boundedText = if (words.size > MAX_OUTPUT_WORDS) {
             words.take(MAX_OUTPUT_WORDS).joinToString(" ") + "…"
         } else {
             trimmed
+        }
+
+        // Enforce hard token budget bound (<= 200 tokens)
+        val estimatedTokens = TokenBudgetConfig.estimateTokens(boundedText)
+        if (estimatedTokens > HARD_MAX_TOKENS) {
+            val allowedChars = (HARD_MAX_TOKENS * TokenBudgetConfig.CHARS_PER_TOKEN_HEURISTIC).toInt()
+            boundedText = boundedText.take(allowedChars).trimEnd() + "…"
         }
 
         return ParsedModelResponse(

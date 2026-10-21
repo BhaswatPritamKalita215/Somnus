@@ -12,6 +12,8 @@ interface FoodLogRepository {
     fun getDailySummary(date: LocalDate, calorieTarget: Int? = 2000): Flow<DailyNutritionSummary>
     fun getRecentEntries(limit: Int = 20): Flow<List<FoodLogEntry>>
     suspend fun logFood(entry: FoodLogEntry)
+    suspend fun updateEntry(entry: FoodLogEntry)
+    suspend fun getEntryById(id: String): FoodLogEntry?
     suspend fun deleteEntry(id: String)
     suspend fun deleteAll()
 }

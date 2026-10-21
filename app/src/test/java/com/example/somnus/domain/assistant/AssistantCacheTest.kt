@@ -95,4 +95,25 @@ class AssistantCacheTest {
         val cached = shortTtlCache.get(key, nowMs = now + 200L)
         assertNull(cached)
     }
+
+    @Test
+    fun invalidateDomain_nutritionAndSteps_properlyEvicted() {
+        val nutrKey = cache.createKey("nutrition today", today, "fp_nutr")
+        val stepKey = cache.createKey("steps today", today, "fp_step")
+        val sleepKey = cache.createKey("sleep today", today, "fp_sleep")
+
+        cache.put(nutrKey, "Nutr resp", emptyList(), DataReferenceDomain.NUTRITION)
+        cache.put(stepKey, "Step resp", emptyList(), DataReferenceDomain.STEPS)
+        cache.put(sleepKey, "Sleep resp", emptyList(), DataReferenceDomain.SLEEP)
+
+        cache.invalidateDomain(DataReferenceDomain.NUTRITION)
+        assertNull(cache.get(nutrKey))
+        assertNotNull(cache.get(stepKey))
+        assertNotNull(cache.get(sleepKey))
+
+        cache.invalidateDomain(DataReferenceDomain.STEPS)
+        assertNull(cache.get(stepKey))
+        assertNotNull(cache.get(sleepKey))
+    }
 }
+

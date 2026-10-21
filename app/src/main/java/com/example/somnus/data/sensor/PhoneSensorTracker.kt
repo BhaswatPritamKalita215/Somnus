@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.time.Instant
+import java.util.Collections
 import java.util.UUID
 
 /**
@@ -20,16 +21,16 @@ import java.util.UUID
  * and tracking interruption auditing.
  */
 class PhoneSensorTracker(
-    private val context: Context
+    private val context: Context,
+    private val sensorManager: SensorManager? = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager,
+    private val powerManager: PowerManager? = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
 ) : SensorEventListener {
 
-    private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
-    private val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-    private val accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val accelerometer: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
     private val aggregator = MovementWindowAggregator()
-    private val _completedEpochs = mutableListOf<MovementEpoch>()
-    private val _interruptions = mutableListOf<TrackingInterruption>()
+    private val _completedEpochs: MutableList<MovementEpoch> = Collections.synchronizedList(mutableListOf())
+    private val _interruptions: MutableList<TrackingInterruption> = Collections.synchronizedList(mutableListOf())
     private var activeInterruption: TrackingInterruption? = null
 
     private val _isTracking = MutableStateFlow(false)
@@ -37,14 +38,29 @@ class PhoneSensorTracker(
 
     private var currentSessionId: String? = null
 
+    val currentEpochCount: Int
+        get() = _completedEpochs.size
+
+    val currentInterruptionCount: Int
+        get() = _interruptions.size
+
+    val activeInterruptionReason: InterruptionReason?
+        get() = activeInterruption?.reason
+
+    fun getCurrentSessionId(): String? = currentSessionId
+
     fun getSensorAvailability(): SensorAvailabilityReport {
         val hasAccel = accelerometer != null
         val isBatterySaver = powerManager?.isPowerSaveMode ?: false
 
-        val batteryStatusIntent = context.registerReceiver(
-            null,
-            IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-        )
+        val batteryStatusIntent = try {
+            context.registerReceiver(
+                null,
+                IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            )
+        } catch (e: Exception) {
+            null
+        }
         val level = batteryStatusIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = batteryStatusIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
         val pct = if (level >= 0 && scale > 0) (level * 100) / scale else -1
@@ -63,7 +79,15 @@ class PhoneSensorTracker(
         )
     }
 
+    /**
+     * Starts tracking motion samples for the given session.
+     * Idempotent: If already tracking for the same session, returns true without resetting state.
+     */
     fun startTracking(sessionId: String): Boolean {
+        if (_isTracking.value && currentSessionId == sessionId) {
+            return true
+        }
+
         if (accelerometer == null || sensorManager == null) {
             recordInterruption(InterruptionReason.SENSOR_INACTIVE, "No hardware accelerometer available.")
             return false
@@ -90,7 +114,36 @@ class PhoneSensorTracker(
         return registered
     }
 
+    /**
+     * Completes and stores the current windowed epoch.
+     * Called periodically during tracking and immediately upon stopping.
+     */
+    fun completeCurrentEpoch(): MovementEpoch? {
+        if (!_isTracking.value) return null
+        val isScreenOn = powerManager?.isInteractive ?: false
+        val batteryStatus = getSensorAvailability()
+        val epoch = aggregator.completeEpoch(
+            endTime = Instant.now(),
+            isScreenOn = isScreenOn,
+            isCharging = batteryStatus.isCharging
+        )
+        _completedEpochs.add(epoch)
+        return epoch
+    }
+
+    /**
+     * Stops tracking, completes any pending movement epoch, unregisters sensor listeners,
+     * and closes any ongoing interruption.
+     * Idempotent: If already stopped, returns recorded epochs safely.
+     */
     fun stopTracking(): List<MovementEpoch> {
+        if (!_isTracking.value) {
+            return _completedEpochs.toList()
+        }
+
+        // Finalize last epoch window if active
+        completeCurrentEpoch()
+
         sensorManager?.unregisterListener(this)
         _isTracking.value = false
 
@@ -100,6 +153,7 @@ class PhoneSensorTracker(
         return _completedEpochs.toList()
     }
 
+    @Synchronized
     fun recordInterruption(reason: InterruptionReason, notes: String? = null) {
         closeActiveInterruption()
         val interruption = TrackingInterruption(
@@ -113,10 +167,12 @@ class PhoneSensorTracker(
         _interruptions.add(interruption)
     }
 
+    @Synchronized
     fun resolveInterruption() {
         closeActiveInterruption()
     }
 
+    @Synchronized
     private fun closeActiveInterruption() {
         val ongoing = activeInterruption ?: return
         val index = _interruptions.indexOfFirst { it.id == ongoing.id }

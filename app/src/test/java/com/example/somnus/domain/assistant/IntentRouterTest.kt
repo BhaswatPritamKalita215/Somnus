@@ -110,4 +110,63 @@ class IntentRouterTest {
         assertEquals(today.minusDays(6), result.dateRange?.start)
         assertEquals(today, result.dateRange?.endInclusive)
     }
+
+    @Test
+    fun route_averageSleepQuery_routesToSleepHistoryWithRangeAndIsLocal() {
+        val result = IntentRouter.route("What is my average sleep duration?", today)
+        assertEquals(IntentType.SLEEP_HISTORY, result.intentType)
+        assertTrue(result.isLocal)
+        assertNotNull(result.dateRange)
+        assertEquals(today.minusDays(6), result.dateRange?.start)
+        assertEquals(today, result.dateRange?.endInclusive)
+    }
+
+    @Test
+    fun route_averageBedtimeQuery_routesToSleepHistoryAndIsLocal() {
+        val result = IntentRouter.route("What is my average bedtime?", today)
+        assertEquals(IntentType.SLEEP_HISTORY, result.intentType)
+        assertTrue(result.isLocal)
+        assertNotNull(result.dateRange)
+    }
+
+    @Test
+    fun route_past30DaysQuery_extracts30DayDateRange() {
+        val result = IntentRouter.route("How many steps did I take in the past 30 days?", today)
+        assertEquals(IntentType.HISTORICAL_STEPS, result.intentType)
+        assertTrue(result.isLocal)
+        assertNotNull(result.dateRange)
+        assertEquals(today.minusDays(29), result.dateRange?.start)
+        assertEquals(today, result.dateRange?.endInclusive)
+    }
+
+    @Test
+    fun route_sleepDurationQuery_routesToLatestSleepAndIsLocal() {
+        val result = IntentRouter.route("What was my sleep duration last night?", today)
+        assertEquals(IntentType.LATEST_SLEEP, result.intentType)
+        assertTrue(result.isLocal)
+    }
+
+    @Test
+    fun route_allLocalAnswerableQueries_haveIsLocalTrueAndZeroModelInvocationRequirement() {
+        val localQueries = listOf(
+            "How many steps today?",
+            "How many steps did I walk yesterday?",
+            "What is my average step count?",
+            "How did I sleep last night?",
+            "What is my sleep duration?",
+            "Show my average sleep this week",
+            "What are my nutrition totals today?",
+            "How many calories did I eat yesterday?",
+            "Show my calories burned today",
+            "Why is my sleep data missing?",
+            "Why do I have zero steps recorded?",
+            "What is the relationship between my steps vs sleep?"
+        )
+
+        for (q in localQueries) {
+            val routed = IntentRouter.route(q, today)
+            assertTrue("Expected isLocal = true for query: \"$q\"", routed.isLocal)
+            assertFalse("Expected requiresModel = false for query: \"$q\"", routed.intentType.requiresModel)
+        }
+    }
 }

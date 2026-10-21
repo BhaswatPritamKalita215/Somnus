@@ -140,4 +140,37 @@ class FoodRepositoriesTest {
         logRepository.deleteEntry(entry.id)
         assertEquals(0, logRepository.getEntriesForDate(today).first().size)
     }
+
+    @Test
+    fun updateFoodEntry_updatesNutrientsAndPreservesId() = runBlocking {
+        val today = LocalDate.now()
+        val entry = NutritionCalculator.createLogEntry(
+            product = fakeRemoteProduct,
+            quantity = 34.0,
+            unit = ServingUnit.GRAMS,
+            localDate = today
+        )
+
+        logRepository.logFood(entry)
+        val saved = logRepository.getEntryById(entry.id)
+        assertNotNull(saved)
+        assertEquals("Oreo Cookies", saved!!.productName)
+        assertEquals(163.2, saved.calculatedCalories, 0.1)
+
+        val updated = saved.copy(
+            quantity = 68.0,
+            calculatedCalories = 326.4,
+            calculatedProtein = 3.4
+        )
+        logRepository.updateEntry(updated)
+
+        val afterUpdate = logRepository.getEntryById(entry.id)
+        assertNotNull(afterUpdate)
+        assertEquals(68.0, afterUpdate!!.quantity, 0.01)
+        assertEquals(326.4, afterUpdate.calculatedCalories, 0.1)
+        assertEquals(3.4, afterUpdate.calculatedProtein ?: 0.0, 0.01)
+
+        val dailySummary = logRepository.getDailySummary(today, 2000).first()
+        assertEquals(326.4, dailySummary.totalCalories, 0.1)
+    }
 }

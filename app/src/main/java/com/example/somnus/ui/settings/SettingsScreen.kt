@@ -51,6 +51,7 @@ import com.example.somnus.ui.components.SomnusTopBar
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    onNavigateBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -75,7 +76,8 @@ fun SettingsScreen(
         topBar = {
             SomnusTopBar(
                 title = "Settings",
-                subtitle = "Privacy & Diagnostics"
+                subtitle = "Privacy & Diagnostics",
+                onBackClick = onNavigateBack
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },

@@ -183,13 +183,14 @@ class ActivityViewModelTest {
         val collectJob = launch(testDispatcher) { viewModel.uiState.collect() }
         advanceUntilIdle()
 
+        val todayStart = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
         fakeClient.stubbedAvailability = HealthConnectAvailability.AVAILABLE
         fakeClient.stepPermissionsGranted = true
         fakeClient.stepRecordsToReturn.add(
             HealthConnectStepRecord(
                 id = "hc_vm_step_1",
-                startTime = Instant.now().minusSeconds(3600),
-                endTime = Instant.now(),
+                startTime = todayStart.plusSeconds(3600),
+                endTime = todayStart.plusSeconds(7200),
                 count = 3200,
                 deviceModel = "Pixel Watch"
             )

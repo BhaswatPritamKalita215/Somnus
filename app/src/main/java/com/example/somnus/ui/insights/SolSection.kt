@@ -56,13 +56,11 @@ import java.time.ZonedDateTime
 @Composable
 fun SolSection(
     uiState: InsightsUiState,
-    onSaveRecord: (LocalDate, Int, SolMeasurementMethod, String, String?, String?) -> Unit,
-    onSaveWithTimestamps: (java.time.Instant, java.time.Instant, LocalDate, SolMeasurementMethod, String?) -> Unit,
     onDeleteRecord: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSaveRecord: ((LocalDate, Int, SolMeasurementMethod, String, String?, String?) -> Unit)? = null,
+    onSaveWithTimestamps: ((java.time.Instant, java.time.Instant, LocalDate, SolMeasurementMethod, String?) -> Unit)? = null
 ) {
-    var showLogDialog by remember { mutableStateOf(false) }
-
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -86,16 +84,6 @@ fun SolSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        }
-
-        Button(
-            onClick = { showLogDialog = true },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Log Nightly Latency")
         }
 
         // Latest Nightly Card
@@ -125,20 +113,6 @@ fun SolSection(
         HistoricalSolList(
             records = uiState.solRecords,
             onDeleteRecord = onDeleteRecord
-        )
-    }
-
-    if (showLogDialog) {
-        LogSolDialog(
-            onDismiss = { showLogDialog = false },
-            onSaveManual = { date, minutes, method, notes ->
-                showLogDialog = false
-                onSaveRecord(date, minutes, method, "manual", null, notes)
-            },
-            onSaveCalculated = { attemptTime, onsetTime, date, method, notes ->
-                showLogDialog = false
-                onSaveWithTimestamps(attemptTime, onsetTime, date, method, notes)
-            }
         )
     }
 }
@@ -415,161 +389,3 @@ private fun HistoricalSolList(
     }
 }
 
-@Composable
-private fun LogSolDialog(
-    onDismiss: () -> Unit,
-    onSaveManual: (LocalDate, Int, SolMeasurementMethod, String?) -> Unit,
-    onSaveCalculated: (java.time.Instant, java.time.Instant, LocalDate, SolMeasurementMethod, String?) -> Unit
-) {
-    var entryMode by remember { mutableStateOf(0) } // 0 = Direct minutes, 1 = Clock times
-    var dateString by remember { mutableStateOf(LocalDate.now().toString()) }
-    var latencyMinutesText by remember { mutableStateOf("20") }
-    var attemptTimeText by remember { mutableStateOf("23:15") }
-    var onsetTimeText by remember { mutableStateOf("23:45") }
-    var selectedMethod by remember { mutableStateOf(SolMeasurementMethod.SELF_REPORTED) }
-    var notesText by remember { mutableStateOf("") }
-    var validationError by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Log Sleep Onset Latency") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = entryMode == 0,
-                        onClick = { entryMode = 0 },
-                        label = { Text("Direct Minutes") }
-                    )
-                    FilterChip(
-                        selected = entryMode == 1,
-                        onClick = { entryMode = 1 },
-                        label = { Text("In-Bed to Onset") }
-                    )
-                }
-
-                OutlinedTextField(
-                    value = dateString,
-                    onValueChange = { dateString = it },
-                    label = { Text("Reporting Date (YYYY-MM-DD)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                if (entryMode == 0) {
-                    OutlinedTextField(
-                        value = latencyMinutesText,
-                        onValueChange = { latencyMinutesText = it },
-                        label = { Text("Latency (Minutes)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    OutlinedTextField(
-                        value = attemptTimeText,
-                        onValueChange = { attemptTimeText = it },
-                        label = { Text("Attempt to Sleep (HH:mm)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = onsetTimeText,
-                        onValueChange = { onsetTimeText = it },
-                        label = { Text("Sleep Onset Time (HH:mm)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Text(
-                    text = "Method:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FilterChip(
-                        selected = selectedMethod == SolMeasurementMethod.SELF_REPORTED,
-                        onClick = { selectedMethod = SolMeasurementMethod.SELF_REPORTED },
-                        label = { Text("Self-Reported") }
-                    )
-                    FilterChip(
-                        selected = selectedMethod == SolMeasurementMethod.ALGORITHM_ESTIMATE,
-                        onClick = { selectedMethod = SolMeasurementMethod.ALGORITHM_ESTIMATE },
-                        label = { Text("Algorithm") }
-                    )
-                }
-
-                OutlinedTextField(
-                    value = notesText,
-                    onValueChange = { notesText = it },
-                    label = { Text("Notes (optional)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                if (validationError != null) {
-                    Text(
-                        text = validationError!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val parsedDate = try {
-                        LocalDate.parse(dateString.trim())
-                    } catch (e: Exception) {
-                        validationError = "Invalid date format. Use YYYY-MM-DD."
-                        return@Button
-                    }
-
-                    if (entryMode == 0) {
-                        val minutes = latencyMinutesText.trim().toIntOrNull()
-                        if (minutes == null || minutes < 0) {
-                            validationError = "Enter valid positive minutes."
-                            return@Button
-                        }
-                        onSaveManual(parsedDate, minutes, selectedMethod, notesText.ifBlank { null })
-                    } else {
-                        try {
-                            val attemptLocal = LocalTime.parse(attemptTimeText.trim())
-                            val onsetLocal = LocalTime.parse(onsetTimeText.trim())
-                            val zone = ZoneId.systemDefault()
-
-                            // Construct Instants (handling crossing midnight)
-                            val attemptZdt = ZonedDateTime.of(parsedDate, attemptLocal, zone)
-                            val onsetDate = if (onsetLocal.isBefore(attemptLocal)) parsedDate.plusDays(1) else parsedDate
-                            val onsetZdt = ZonedDateTime.of(onsetDate, onsetLocal, zone)
-
-                            onSaveCalculated(
-                                attemptZdt.toInstant(),
-                                onsetZdt.toInstant(),
-                                parsedDate,
-                                selectedMethod,
-                                notesText.ifBlank { null }
-                            )
-                        } catch (e: Exception) {
-                            validationError = "Invalid time format: ${e.message}"
-                        }
-                    }
-                }
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}

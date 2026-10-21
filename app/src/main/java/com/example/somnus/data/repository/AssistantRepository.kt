@@ -41,4 +41,9 @@ interface AssistantRepository {
      * Resets local diagnostics metrics.
      */
     fun resetDiagnostics()
+
+    /**
+     * Invalidates cache entries for a specific health domain (e.g. on new records) or all entries if domain is null.
+     */
+    fun invalidateCache(domain: com.example.somnus.domain.assistant.DataReferenceDomain? = null)
 }

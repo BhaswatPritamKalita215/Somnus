@@ -23,6 +23,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Foreground Service permissions for overnight sleep sensor tracking (Android 9+ and 14+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!-- Queries declaration for Health Connect client packages -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
@@ -62,6 +68,12 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Overnight Sleep Sensor Tracking Foreground Service -->
+        <service
+            android:name=".service.SleepTrackingService"
+            android:foregroundServiceType="health"
+            android:exported="false" />
     </application>
 
 </manifest>

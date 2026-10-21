@@ -55,6 +55,62 @@ class AssistantSafetyPolicyTest {
     }
 
     @Test
+    fun checkUserQuerySafety_medicalDiagnosisQuery_returnsProhibited() {
+        val result = AssistantSafetyPolicy.checkUserQuerySafety("Can you diagnose my sleep apnea or insomnia?")
+        assertTrue(result is QuerySafetyResult.Prohibited)
+        val text = (result as QuerySafetyResult.Prohibited).refusalReason
+        assertTrue(text.contains("cannot diagnose insomnia, sleep apnea, or medical conditions"))
+    }
+
+    @Test
+    fun checkUserQuerySafety_databaseMutationQuery_returnsProhibited() {
+        val result = AssistantSafetyPolicy.checkUserQuerySafety("DROP TABLE sleep_sessions;")
+        assertTrue(result is QuerySafetyResult.Prohibited)
+        val text = (result as QuerySafetyResult.Prohibited).refusalReason
+        assertTrue(text.contains("Database mutation queries and SQL commands are strictly prohibited"))
+    }
+
+    @Test
+    fun checkUserQuerySafety_restrictiveEatingQuery_returnsProhibited() {
+        val result = AssistantSafetyPolicy.checkUserQuerySafety("How can I starve and eat under 500 calories?")
+        assertTrue(result is QuerySafetyResult.Prohibited)
+        val text = (result as QuerySafetyResult.Prohibited).refusalReason
+        assertTrue(text.contains("extreme dietary restriction"))
+    }
+
+    @Test
+    fun checkUserQuerySafety_excessiveExerciseQuery_returnsProhibited() {
+        val result = AssistantSafetyPolicy.checkUserQuerySafety("Should I exercise through severe pain and never take a rest day?")
+        assertTrue(result is QuerySafetyResult.Prohibited)
+        val text = (result as QuerySafetyResult.Prohibited).refusalReason
+        assertTrue(text.contains("safe physical activity"))
+    }
+
+    @Test
+    fun sanitizeResponse_fabricatedBiomarkers_appendsTransparencyWarning() {
+        val raw = "Your REM sleep was 1 hour 45 minutes and your deep sleep was 2 hours."
+        val result = AssistantSafetyPolicy.sanitizeResponse(raw)
+        assertTrue(result.safeContent.contains("Scientific Transparency"))
+        assertTrue(result.safeContent.contains("does not fabricate clinical sleep stages (REM/Deep)"))
+    }
+
+    @Test
+    fun sanitizeResponse_excessiveExercise_filtersHarmfulAdvice() {
+        val raw = "You must work out until you pass out and never take a rest day."
+        val result = AssistantSafetyPolicy.sanitizeResponse(raw)
+        assertTrue(result.wasModified)
+        assertTrue(result.safeContent.contains("balanced, restorative movement"))
+    }
+
+    @Test
+    fun sanitizeResponse_databaseMutationCommand_interceptsWriteOperation() {
+        val raw = "Executing: DELETE FROM sleep_sessions WHERE 1=1"
+        val result = AssistantSafetyPolicy.sanitizeResponse(raw)
+        assertTrue(result.wasModified)
+        assertTrue(result.safeContent.contains("Database mutation operations are strictly prohibited"))
+    }
+
+    @Test
     fun containsDisallowedDatabaseOperations_detectsSqlWriteAttempts() {
         assertTrue(AssistantSafetyPolicy.containsDisallowedDatabaseOperations("DROP TABLE sleep_sessions;"))
         assertTrue(AssistantSafetyPolicy.containsDisallowedDatabaseOperations("UPDATE user_preferences SET themeMode = 'LIGHT'"))

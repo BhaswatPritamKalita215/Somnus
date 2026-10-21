@@ -6,6 +6,7 @@ import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -682,4 +683,277 @@ class SomnusDatabaseMigrationTest {
         dbV5.close()
         dbFile.delete()
     }
+
+    @Test
+    fun migration_6_to_7_preservesExistingData_andCreatesSleepCheckInTable() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbFile = File(context.cacheDir, "test_migration_6_7.db")
+        if (dbFile.exists()) dbFile.delete()
+
+        val configuration = androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name(dbFile.name)
+            .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(6) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    // Create v6 Schema Tables
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `sleep_sessions` (
+                            `id` TEXT NOT NULL,
+                            `startTime` INTEGER NOT NULL,
+                            `endTime` INTEGER,
+                            `timezoneId` TEXT NOT NULL,
+                            `status` TEXT NOT NULL,
+                            `source` TEXT NOT NULL,
+                            `createdAt` INTEGER NOT NULL,
+                            `updatedAt` INTEGER NOT NULL,
+                            `notes` TEXT,
+                            `isCorrected` INTEGER NOT NULL,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `food_log_entries` (
+                            `id` TEXT NOT NULL,
+                            `productId` TEXT,
+                            `barcode` TEXT,
+                            `productName` TEXT NOT NULL,
+                            `brand` TEXT,
+                            `mealType` TEXT NOT NULL,
+                            `loggedAt` INTEGER NOT NULL,
+                            `localDate` TEXT NOT NULL,
+                            `quantity` REAL NOT NULL,
+                            `unit` TEXT NOT NULL,
+                            `numberOfServings` REAL,
+                            `calculatedCalories` REAL NOT NULL,
+                            `calculatedProtein` REAL,
+                            `calculatedCarbs` REAL,
+                            `calculatedFat` REAL,
+                            `calculatedSaturatedFat` REAL,
+                            `calculatedTransFat` REAL,
+                            `calculatedFiber` REAL,
+                            `calculatedSugar` REAL,
+                            `calculatedAddedSugars` REAL,
+                            `calculatedSodiumMg` REAL,
+                            `calculatedSaltG` REAL,
+                            `source` TEXT NOT NULL,
+                            `externalRecordId` TEXT,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `step_records` (
+                            `id` TEXT NOT NULL,
+                            `startTime` INTEGER NOT NULL,
+                            `endTime` INTEGER NOT NULL,
+                            `localDate` TEXT NOT NULL,
+                            `zoneId` TEXT NOT NULL,
+                            `stepCount` INTEGER NOT NULL,
+                            `source` TEXT NOT NULL,
+                            `sourceIdentifier` TEXT NOT NULL,
+                            `deviceModel` TEXT,
+                            `externalRecordId` TEXT,
+                            `createdAt` INTEGER NOT NULL,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `assistant_messages` (
+                            `id` TEXT NOT NULL,
+                            `role` TEXT NOT NULL,
+                            `content` TEXT NOT NULL,
+                            `timestampEpochMs` INTEGER NOT NULL,
+                            `wasLocalHandled` INTEGER NOT NULL,
+                            `inputTokens` INTEGER NOT NULL,
+                            `outputTokens` INTEGER NOT NULL,
+                            `latencyMs` INTEGER NOT NULL,
+                            `intentType` TEXT,
+                            `referencesJson` TEXT NOT NULL,
+                            `isError` INTEGER NOT NULL,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                }
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+            })
+            .build()
+
+        val helper = FrameworkSQLiteOpenHelperFactory().create(configuration)
+        val dbV6 = helper.writableDatabase
+
+        // Insert at least one sleep session, one food log, and one step record into v6 database
+        dbV6.execSQL(
+            """
+            INSERT INTO sleep_sessions (id, startTime, endTime, timezoneId, status, source, createdAt, updatedAt, notes, isCorrected)
+            VALUES ('sess-v6-1', 1700000000000, 1700028800000, 'UTC', 'COMPLETED', 'MANUAL', 1700000000000, 1700028800000, 'Pre-migration Sleep Session', 0)
+            """.trimIndent()
+        )
+        dbV6.execSQL(
+            """
+            INSERT INTO food_log_entries (id, productName, mealType, loggedAt, localDate, quantity, unit, calculatedCalories, calculatedProtein, calculatedCarbs, calculatedFat, source)
+            VALUES ('food-v6-1', 'Oatmeal with Almonds', 'BREAKFAST', 1700030000000, '2026-10-21', 150.0, 'GRAMS', 280.0, 9.5, 42.0, 6.0, 'LOCAL_USER')
+            """.trimIndent()
+        )
+        dbV6.execSQL(
+            """
+            INSERT INTO step_records (id, startTime, endTime, localDate, zoneId, stepCount, source, sourceIdentifier, createdAt)
+            VALUES ('step-v6-1', 1700000000000, 1700003600000, '2026-10-21', 'UTC', 3420, 'PHONE_HARDWARE', 'sensor_step_counter', 1700003600000)
+            """.trimIndent()
+        )
+
+        // Run MIGRATION_6_7
+        SomnusDatabase.MIGRATION_6_7.migrate(dbV6)
+
+        // Assert pre-existing rows are intact
+        val sessionCursor = dbV6.query("SELECT id, notes, status FROM sleep_sessions WHERE id = 'sess-v6-1'")
+        assertTrue(sessionCursor.moveToFirst())
+        assertEquals("sess-v6-1", sessionCursor.getString(0))
+        assertEquals("Pre-migration Sleep Session", sessionCursor.getString(1))
+        assertEquals("COMPLETED", sessionCursor.getString(2))
+        sessionCursor.close()
+
+        val foodCursor = dbV6.query("SELECT id, productName, calculatedCalories FROM food_log_entries WHERE id = 'food-v6-1'")
+        assertTrue(foodCursor.moveToFirst())
+        assertEquals("food-v6-1", foodCursor.getString(0))
+        assertEquals("Oatmeal with Almonds", foodCursor.getString(1))
+        assertEquals(280.0, foodCursor.getDouble(2), 0.01)
+        foodCursor.close()
+
+        val stepCursor = dbV6.query("SELECT id, stepCount, sourceIdentifier FROM step_records WHERE id = 'step-v6-1'")
+        assertTrue(stepCursor.moveToFirst())
+        assertEquals("step-v6-1", stepCursor.getString(0))
+        assertEquals(3420, stepCursor.getLong(1))
+        assertEquals("sensor_step_counter", stepCursor.getString(2))
+        stepCursor.close()
+
+        // Assert the new sleep_check_ins table exists
+        val tableCheckCursor = dbV6.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'sleep_check_ins'")
+        assertTrue("sleep_check_ins table must exist", tableCheckCursor.moveToFirst())
+        tableCheckCursor.close()
+
+        // Assert indexes exist
+        val sessionIndexCursor = dbV6.query("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'index_sleep_check_ins_sessionId'")
+        assertTrue("index_sleep_check_ins_sessionId must exist", sessionIndexCursor.moveToFirst())
+        sessionIndexCursor.close()
+
+        // Assert a row can be inserted into sleep_check_ins linked to an existing sleep session id
+        dbV6.execSQL(
+            """
+            INSERT INTO sleep_check_ins (id, sessionId, moodScore, moodLabel, restedScore, notes, createdAt, isSelfReported)
+            VALUES ('checkin-v7-1', 'sess-v6-1', 4, 'Refreshed', 5, 'Great rest', 1700028900000, 1)
+            """.trimIndent()
+        )
+
+        val checkInCursor = dbV6.query(
+            "SELECT id, sessionId, moodScore, moodLabel, restedScore, notes, isSelfReported FROM sleep_check_ins WHERE id = 'checkin-v7-1'"
+        )
+        assertTrue(checkInCursor.moveToFirst())
+        assertEquals("checkin-v7-1", checkInCursor.getString(0))
+        assertEquals("sess-v6-1", checkInCursor.getString(1))
+        assertEquals(4, checkInCursor.getInt(2))
+        assertEquals("Refreshed", checkInCursor.getString(3))
+        assertEquals(5, checkInCursor.getInt(4))
+        assertEquals("Great rest", checkInCursor.getString(5))
+        assertEquals(1, checkInCursor.getInt(6))
+        checkInCursor.close()
+
+        dbV6.close()
+        dbFile.delete()
+    }
+
+    @Test
+    fun migration_6_to_7_skippedMorningCheckIn_isStoredAsMissingOrNull_notZeroScores() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbFile = File(context.cacheDir, "test_migration_6_7_skipped.db")
+        if (dbFile.exists()) dbFile.delete()
+
+        val configuration = androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name(dbFile.name)
+            .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(6) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `sleep_sessions` (
+                            `id` TEXT NOT NULL,
+                            `startTime` INTEGER NOT NULL,
+                            `endTime` INTEGER,
+                            `timezoneId` TEXT NOT NULL,
+                            `status` TEXT NOT NULL,
+                            `source` TEXT NOT NULL,
+                            `createdAt` INTEGER NOT NULL,
+                            `updatedAt` INTEGER NOT NULL,
+                            `notes` TEXT,
+                            `isCorrected` INTEGER NOT NULL,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                }
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+            })
+            .build()
+
+        val helper = FrameworkSQLiteOpenHelperFactory().create(configuration)
+        val db = helper.writableDatabase
+
+        db.execSQL(
+            """
+            INSERT INTO sleep_sessions (id, startTime, endTime, timezoneId, status, source, createdAt, updatedAt, notes, isCorrected)
+            VALUES ('sess-skipped', 1700000000000, 1700028800000, 'UTC', 'COMPLETED', 'MANUAL', 1700000000000, 1700028800000, 'Skipped check-in test session', 0)
+            """.trimIndent()
+        )
+
+        // Apply MIGRATION_6_7
+        SomnusDatabase.MIGRATION_6_7.migrate(db)
+
+        // 1. When a user skips the morning check-in completely, NO check-in row is created.
+        // Querying for the sessionId returns empty cursor (missing / null).
+        val emptyCursor = db.query("SELECT * FROM sleep_check_ins WHERE sessionId = 'sess-skipped'")
+        assertEquals("A completely skipped check-in must not create a phantom record", 0, emptyCursor.count)
+        emptyCursor.close()
+
+        // 2. When a check-in is stored with omitted/skipped ratings (e.g. note only or skipped prompts),
+        // moodScore and restedScore MUST be stored as SQL NULL, never as 0.
+        db.execSQL(
+            """
+            INSERT INTO sleep_check_ins (id, sessionId, moodScore, moodLabel, restedScore, notes, createdAt, isSelfReported)
+            VALUES ('checkin-partial', 'sess-skipped', NULL, NULL, NULL, 'Only wrote a note', 1700028900000, 1)
+            """.trimIndent()
+        )
+
+        val partialCursor = db.query("SELECT moodScore, restedScore, moodLabel, notes FROM sleep_check_ins WHERE id = 'checkin-partial'")
+        assertTrue(partialCursor.moveToFirst())
+        assertTrue("moodScore must be SQL NULL (missing), NOT 0", partialCursor.isNull(0))
+        assertTrue("restedScore must be SQL NULL (missing), NOT 0", partialCursor.isNull(1))
+        assertTrue("moodLabel must be SQL NULL", partialCursor.isNull(2))
+        assertEquals("Only wrote a note", partialCursor.getString(3))
+        partialCursor.close()
+
+        // 3. Verify SleepCheckInEntity maps null scores to null domain scores (not 0)
+        val entity = SleepCheckInEntity(
+            id = "checkin-entity-test",
+            sessionId = "sess-skipped",
+            moodScore = null,
+            moodLabel = null,
+            restedScore = null,
+            notes = null,
+            createdAt = 1700028900000L,
+            isSelfReported = true
+        )
+        val domain = entity.toDomain()
+        assertNull("Domain moodScore must be null, never 0", domain.moodScore)
+        assertNull("Domain restedScore must be null, never 0", domain.restedScore)
+
+        db.close()
+        dbFile.delete()
+    }
 }
+

@@ -61,17 +61,20 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun AnalyticsScreen(
     viewModel: AnalyticsViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showTopBar: Boolean = true
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showCustomDateDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
-            SomnusTopBar(
-                title = "Sleep Analytics",
-                subtitle = state.selectedRange.label
-            )
+            if (showTopBar) {
+                SomnusTopBar(
+                    title = "Sleep Analytics",
+                    subtitle = state.selectedRange.label
+                )
+            }
         },
         modifier = modifier
     ) { paddingValues ->
