@@ -14,25 +14,35 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -109,6 +119,18 @@ fun SettingsScreen(
             OnlineFoodLookupCard(
                 enabled = state.userPreferences.onlineFoodLookupEnabled,
                 onToggle = { viewModel.setOnlineFoodLookupEnabled(it) }
+            )
+
+            // AI Assistant Groq Cloud API Preference & Connection Test
+            GroqAssistantApiKeyCard(
+                currentApiKey = state.userPreferences.groqApiKey,
+                consentGranted = state.userPreferences.groqPrivacyConsentGranted,
+                isTesting = state.isTestingGroq,
+                testResult = state.groqTestResult,
+                testSuccess = state.groqTestSuccess,
+                onSaveKey = { viewModel.setGroqApiKey(it) },
+                onTestConnection = { viewModel.testGroqConnection(it) },
+                onConsentGranted = { viewModel.setGroqPrivacyConsent(true) }
             )
 
             // Dangerous Data Management (Delete All Data)
@@ -407,6 +429,182 @@ private fun AboutCard(modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
             )
+        }
+    }
+}
+
+@Composable
+private fun GroqAssistantApiKeyCard(
+    currentApiKey: String,
+    consentGranted: Boolean,
+    isTesting: Boolean,
+    testResult: String?,
+    testSuccess: Boolean?,
+    onSaveKey: (String) -> Unit,
+    onTestConnection: (String) -> Unit,
+    onConsentGranted: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var keyInput by remember(currentApiKey) { mutableStateOf(currentApiKey) }
+    var isKeyVisible by remember { mutableStateOf(false) }
+    var showConsentDialog by remember { mutableStateOf(false) }
+    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    if (showConsentDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showConsentDialog = false
+                pendingAction = null
+                keyInput = ""
+            },
+            title = {
+                Text(text = "Enable Cloud AI?")
+            },
+            text = {
+                Text(
+                    text = "By adding a Groq API key, you allow Somnus to send your health summaries and questions to Groq's servers for processing. Somnus normally keeps all data on your device. Do not proceed if you do not want your data leaving this device."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConsentDialog = false
+                        onConsentGranted()
+                        pendingAction?.invoke()
+                        pendingAction = null
+                    }
+                ) {
+                    Text("I Understand, Enable Groq")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showConsentDialog = false
+                        pendingAction = null
+                        keyInput = ""
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "AI Assistant (Groq Cloud API)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Provide a Groq API key for high-speed cloud neural inference with automatic model selection and rate-limit fallback. If no key is set or offline, Somnus falls back to deterministic on-device answers. Keys are stored locally on-device and never committed to source.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            OutlinedTextField(
+                value = keyInput,
+                onValueChange = { keyInput = it },
+                label = { Text("Groq API Key (gsk_...)") },
+                placeholder = { Text("gsk_...") },
+                singleLine = true,
+                visualTransformation = if (isKeyVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
+                        Icon(
+                            imageVector = if (isKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = if (isKeyVisible) "Hide key" else "Show key"
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        val trimmed = keyInput.trim()
+                        if (consentGranted) {
+                            onSaveKey(trimmed)
+                        } else {
+                            pendingAction = { onSaveKey(trimmed) }
+                            showConsentDialog = true
+                        }
+                    },
+                    enabled = keyInput.trim() != currentApiKey,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Save Key")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        val targetKey = keyInput.trim().ifBlank { currentApiKey }
+                        if (consentGranted) {
+                            onTestConnection(targetKey)
+                        } else {
+                            pendingAction = { onTestConnection(targetKey) }
+                            showConsentDialog = true
+                        }
+                    },
+                    enabled = !isTesting && (keyInput.isNotBlank() || currentApiKey.isNotBlank()),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    if (isTesting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Testing...")
+                    } else {
+                        Text("Test Connection")
+                    }
+                }
+            }
+
+            if (testResult != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                val isSuccess = testSuccess == true
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isSuccess) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = testResult,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isSuccess) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            }
         }
     }
 }

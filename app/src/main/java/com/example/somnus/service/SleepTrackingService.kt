@@ -299,11 +299,13 @@ class SleepTrackingService : Service() {
     private fun acquireWakeLock() {
         if (wakeLock == null) {
             val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
-            wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+            wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)?.apply {
+                setReferenceCounted(false)
+            }
         }
         wakeLock?.let {
             if (!it.isHeld) {
-                it.acquire(MAX_WAKE_LOCK_DURATION_MS)
+                it.acquire()
             }
         }
     }

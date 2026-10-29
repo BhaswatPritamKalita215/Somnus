@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -112,10 +113,46 @@ fun AssistantScreen(
     Scaffold(
         topBar = {
             SomnusTopBar(
-                title = "Local rules assistant",
-                subtitle = "Local-First • Zero Cloud Telemetry",
+                title = if (state.isCloudAiActive) "Somnus AI Assistant" else "Local rules assistant",
+                subtitle = if (state.isCloudAiActive) "Cloud-Accelerated (Groq) • Consent Granted" else "Local-First • Zero Cloud Telemetry",
                 onBackClick = onNavigateBack,
                 actions = {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (state.isCloudAiActive) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (state.isCloudAiActive) Icons.Default.Cloud else Icons.Default.Psychology,
+                                contentDescription = if (state.isCloudAiActive) "Cloud AI Active" else "Local Engine Active",
+                                tint = if (state.isCloudAiActive) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (state.isCloudAiActive) "Cloud AI Active" else "Local Engine Active",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = if (state.isCloudAiActive) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = { viewModel.setDiagnosticsVisible(true) }
                     ) {

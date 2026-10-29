@@ -81,6 +81,8 @@ class AssistantRepositoryImpl(
     private val _diagnostics = MutableStateFlow(AssistantDiagnostics())
     override val diagnosticsFlow: Flow<AssistantDiagnostics> = _diagnostics.asStateFlow()
 
+    override val isCloudInferenceActive: Flow<Boolean> = modelProvider.isCloudActive
+
     override val conversationMessages: Flow<List<AssistantMessage>> =
         dao.observeAllMessages().map { entities ->
             entities.map { it.toDomain() }

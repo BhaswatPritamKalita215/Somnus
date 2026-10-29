@@ -25,7 +25,10 @@ data class SettingsUiState(
     val userPreferences: UserPreferences = UserPreferences(),
     val isDeleting: Boolean = false,
     val deletionSuccess: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isTestingGroq: Boolean = false,
+    val groqTestResult: String? = null,
+    val groqTestSuccess: Boolean? = null
 )
 
 class SettingsViewModel(
@@ -33,7 +36,8 @@ class SettingsViewModel(
     private val solRepository: SolRepository,
     private val psqiRepository: PsqiRepository,
     private val preferencesRepository: UserPreferencesRepository,
-    private val database: com.example.somnus.data.local.SomnusDatabase? = null
+    private val database: com.example.somnus.data.local.SomnusDatabase? = null,
+    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
 ) : ViewModel() {
 
     private val _stateInternal = MutableStateFlow(SettingsUiState())
@@ -67,6 +71,53 @@ class SettingsViewModel(
         viewModelScope.launch {
             preferencesRepository.setOnlineFoodLookupEnabled(enabled)
         }
+    }
+
+    fun setGroqApiKey(apiKey: String) {
+        viewModelScope.launch {
+            preferencesRepository.setGroqApiKey(apiKey)
+        }
+    }
+
+    fun setGroqPrivacyConsent(granted: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.setGroqPrivacyConsentGranted(granted)
+        }
+    }
+
+    fun testGroqConnection(apiKey: String) {
+        viewModelScope.launch {
+            _stateInternal.value = _stateInternal.value.copy(
+                isTestingGroq = true,
+                groqTestResult = null,
+                groqTestSuccess = null
+            )
+            val provider = com.example.somnus.domain.assistant.GroqModelProvider(
+                apiKey = apiKey,
+                ioDispatcher = ioDispatcher
+            )
+            val result = provider.testConnection(apiKey)
+            if (result.isSuccess) {
+                _stateInternal.value = _stateInternal.value.copy(
+                    isTestingGroq = false,
+                    groqTestResult = result.getOrNull(),
+                    groqTestSuccess = true
+                )
+            } else {
+                _stateInternal.value = _stateInternal.value.copy(
+                    isTestingGroq = false,
+                    groqTestResult = result.exceptionOrNull()?.message ?: "Connection test failed",
+                    groqTestSuccess = false
+                )
+            }
+        }
+    }
+
+    fun clearGroqTestResult() {
+        _stateInternal.value = _stateInternal.value.copy(
+            groqTestResult = null,
+            groqTestSuccess = null
+        )
     }
 
     fun deleteAllData() {

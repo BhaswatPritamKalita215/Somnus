@@ -121,6 +121,16 @@ class HomeViewModel(
         initialValue = HomeUiState(isLoading = true)
     )
 
+    init {
+        viewModelScope.launch {
+            serviceRunningFlow.collect { running ->
+                if (running && _uiStateInternal.value.isStartingTracking) {
+                    _uiStateInternal.value = _uiStateInternal.value.copy(isStartingTracking = false)
+                }
+            }
+        }
+    }
+
     fun selectDate(date: LocalDate) {
         _selectedDate.value = date
     }
@@ -260,9 +270,10 @@ class HomeViewModel(
             }
 
             val hasSleepPerms = healthConnectManager.hasPermissions()
+            val hasStepPerms = healthConnectManager.hasStepPermissions()
             val allRequired = com.example.somnus.data.healthconnect.DefaultHealthConnectClientWrapper.REQUIRED_PERMISSIONS +
                 com.example.somnus.data.healthconnect.DefaultHealthConnectClientWrapper.STEP_PERMISSIONS
-            if (!hasSleepPerms && onPermissionRequired != null) {
+            if ((!hasSleepPerms || !hasStepPerms) && onPermissionRequired != null) {
                 onPermissionRequired(allRequired)
                 return@launch
             }

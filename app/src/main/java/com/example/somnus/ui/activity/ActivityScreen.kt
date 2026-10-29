@@ -78,8 +78,8 @@ fun ActivityScreen(
 
     val activityPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) {
-        viewModel.refreshHardwareTracker()
+    ) { isGranted ->
+        viewModel.onActivityPermissionResult(isGranted)
     }
 
     val healthConnectLauncher = rememberLauncherForActivityResult(
@@ -171,11 +171,7 @@ fun ActivityScreen(
                     },
                     onRefreshSensorClick = { viewModel.refreshHardwareTracker() },
                     onRequestPhonePermissionClick = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
-                        } else {
-                            viewModel.refreshHardwareTracker()
-                        }
+                        activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
                     }
                 )
             }
@@ -513,8 +509,20 @@ fun IntegrationStatusCard(
                 }
 
                 if (phoneStatus == PhoneStepTrackerStatus.PERMISSION_REQUIRED) {
-                    Button(onClick = onRequestPhonePermissionClick) {
-                        Text("Grant Permission", style = MaterialTheme.typography.labelSmall)
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(onClick = onRequestPhonePermissionClick) {
+                            Text("Grant Permission", style = MaterialTheme.typography.labelSmall)
+                        }
+                        OutlinedButton(onClick = {
+                            val intent = android.content.Intent(
+                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                android.net.Uri.fromParts("package", context.packageName, null)
+                            )
+                            context.startActivity(intent)
+                        }) {
+                            Text("Settings", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 } else if (phoneStatus == PhoneStepTrackerStatus.READY) {
                     OutlinedButton(onClick = onRefreshSensorClick) {

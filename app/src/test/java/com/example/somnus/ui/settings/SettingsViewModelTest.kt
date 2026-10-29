@@ -148,4 +148,74 @@ class SettingsViewModelTest {
         val savedPrefs = preferencesRepository.userPreferencesFlow.first()
         assertEquals(ThemeMode.LIGHT, savedPrefs.themeMode)
     }
+
+    @Test
+    fun setGroqApiKey_updatesPreferenceInRepository() = runTest(testDispatcher) {
+        val viewModel = SettingsViewModel(
+            sessionRepository = sessionRepository,
+            solRepository = solRepository,
+            psqiRepository = psqiRepository,
+            preferencesRepository = preferencesRepository
+        )
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        viewModel.setGroqApiKey("gsk_test_api_key_12345")
+        advanceUntilIdle()
+
+        val savedPrefs = preferencesRepository.userPreferencesFlow.first()
+        assertEquals("gsk_test_api_key_12345", savedPrefs.groqApiKey)
+    }
+
+    @Test
+    fun testGroqConnection_withBlankKey_setsErrorResult() = runTest(testDispatcher) {
+        val viewModel = SettingsViewModel(
+            sessionRepository = sessionRepository,
+            solRepository = solRepository,
+            psqiRepository = psqiRepository,
+            preferencesRepository = preferencesRepository,
+            ioDispatcher = testDispatcher
+        )
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        viewModel.testGroqConnection("   ")
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.uiState.value.groqTestSuccess)
+        assertTrue(viewModel.uiState.value.groqTestResult?.contains("cannot be empty") == true)
+
+        viewModel.clearGroqTestResult()
+        advanceUntilIdle()
+        assertEquals(null, viewModel.uiState.value.groqTestSuccess)
+        assertEquals(null, viewModel.uiState.value.groqTestResult)
+    }
+
+    @Test
+    fun setGroqPrivacyConsent_updatesPreferenceInRepository() = runTest(testDispatcher) {
+        val viewModel = SettingsViewModel(
+            sessionRepository = sessionRepository,
+            solRepository = solRepository,
+            psqiRepository = psqiRepository,
+            preferencesRepository = preferencesRepository
+        )
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        // Initially false
+        assertEquals(false, viewModel.uiState.value.userPreferences.groqPrivacyConsentGranted)
+
+        viewModel.setGroqPrivacyConsent(true)
+        advanceUntilIdle()
+
+        val savedPrefs = preferencesRepository.userPreferencesFlow.first()
+        assertTrue(savedPrefs.groqPrivacyConsentGranted)
+        assertTrue(viewModel.uiState.value.userPreferences.groqPrivacyConsentGranted)
+    }
 }

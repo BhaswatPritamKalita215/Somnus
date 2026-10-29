@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -29,6 +30,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -207,6 +209,24 @@ class ActivityViewModelTest {
         viewModel.clearSyncMessage()
         advanceUntilIdle()
         assertEquals(null, viewModel.uiState.value.syncMessage)
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun onActivityPermissionResult_requeriesStatus() = runTest(testDispatcher) {
+        val collectJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        viewModel.onActivityPermissionResult(true)
+        advanceUntilIdle()
+        assertNotNull(viewModel.uiState.value.phoneTrackerStatus)
+
+        viewModel.onActivityPermissionResult(false)
+        advanceUntilIdle()
+        assertNotNull(viewModel.uiState.value.phoneTrackerStatus)
 
         collectJob.cancel()
     }

@@ -29,6 +29,7 @@ interface AssistantModelProvider {
     val isAvailable: Boolean
     val modelName: String
     val isNeuralModel: Boolean
+    val isCloudActive: Flow<Boolean> get() = kotlinx.coroutines.flow.flowOf(false)
 
     suspend fun generateResponse(promptContext: PromptContext): Flow<ModelChunk>
 }

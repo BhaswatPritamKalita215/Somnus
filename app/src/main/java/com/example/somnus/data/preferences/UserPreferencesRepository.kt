@@ -25,7 +25,9 @@ data class UserPreferences(
     val dailyStepGoal: Int = 8000,
     val phoneStepTrackingEnabled: Boolean = true,
     val dailyCalorieTarget: Int = 2000,
-    val onlineFoodLookupEnabled: Boolean = false
+    val onlineFoodLookupEnabled: Boolean = false,
+    val groqApiKey: String = "",
+    val groqPrivacyConsentGranted: Boolean = false
 )
 
 class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
@@ -37,6 +39,8 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val PHONE_STEP_TRACKING_ENABLED = booleanPreferencesKey("phone_step_tracking_enabled")
         val DAILY_CALORIE_TARGET = intPreferencesKey("daily_calorie_target")
         val ONLINE_FOOD_LOOKUP_ENABLED = booleanPreferencesKey("online_food_lookup_enabled")
+        val GROQ_API_KEY = stringPreferencesKey("groq_api_key")
+        val GROQ_PRIVACY_CONSENT_GRANTED = booleanPreferencesKey("groq_privacy_consent_granted")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data.map { preferences ->
@@ -51,13 +55,17 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val phoneStepTrackingEnabled = preferences[PreferencesKeys.PHONE_STEP_TRACKING_ENABLED] ?: true
         val dailyCalorieTarget = preferences[PreferencesKeys.DAILY_CALORIE_TARGET] ?: 2000
         val onlineFoodLookupEnabled = preferences[PreferencesKeys.ONLINE_FOOD_LOOKUP_ENABLED] ?: false
+        val groqApiKey = preferences[PreferencesKeys.GROQ_API_KEY] ?: ""
+        val groqPrivacyConsentGranted = preferences[PreferencesKeys.GROQ_PRIVACY_CONSENT_GRANTED] ?: false
         UserPreferences(
             themeMode = themeMode,
             policyAcknowledged = acknowledged,
             dailyStepGoal = dailyStepGoal,
             phoneStepTrackingEnabled = phoneStepTrackingEnabled,
             dailyCalorieTarget = dailyCalorieTarget,
-            onlineFoodLookupEnabled = onlineFoodLookupEnabled
+            onlineFoodLookupEnabled = onlineFoodLookupEnabled,
+            groqApiKey = groqApiKey,
+            groqPrivacyConsentGranted = groqPrivacyConsentGranted
         )
     }
 
@@ -94,6 +102,18 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setOnlineFoodLookupEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.ONLINE_FOOD_LOOKUP_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setGroqApiKey(apiKey: String) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.GROQ_API_KEY] = apiKey.trim()
+        }
+    }
+
+    suspend fun setGroqPrivacyConsentGranted(granted: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.GROQ_PRIVACY_CONSENT_GRANTED] = granted
         }
     }
 }

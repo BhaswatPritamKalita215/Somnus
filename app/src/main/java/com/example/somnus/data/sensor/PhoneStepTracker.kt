@@ -64,30 +64,40 @@ class PhoneStepTracker(
     private val stepCounter = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
     private val stepDetector = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
 
-    private val _status = MutableStateFlow(checkStatus())
-    val status: StateFlow<PhoneStepTrackerStatus> = _status.asStateFlow()
-
     private val _isTracking = MutableStateFlow(false)
     val isTracking: StateFlow<Boolean> = _isTracking.asStateFlow()
 
+    private val _status = MutableStateFlow(PhoneStepTrackerStatus.PERMISSION_REQUIRED)
+    val status: StateFlow<PhoneStepTrackerStatus> = _status.asStateFlow()
+
     private var activeSensorType: Int? = null
 
+    init {
+        checkStatus()
+    }
+
     fun checkStatus(): PhoneStepTrackerStatus {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val calculated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val permission = ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.ACTIVITY_RECOGNITION
             )
             if (permission != PackageManager.PERMISSION_GRANTED) {
-                return PhoneStepTrackerStatus.PERMISSION_REQUIRED
+                PhoneStepTrackerStatus.PERMISSION_REQUIRED
+            } else if (stepCounter != null || stepDetector != null) {
+                if (_isTracking.value) PhoneStepTrackerStatus.ACTIVE else PhoneStepTrackerStatus.READY
+            } else {
+                PhoneStepTrackerStatus.NO_SENSOR_AVAILABLE
+            }
+        } else {
+            if (stepCounter != null || stepDetector != null) {
+                if (_isTracking.value) PhoneStepTrackerStatus.ACTIVE else PhoneStepTrackerStatus.READY
+            } else {
+                PhoneStepTrackerStatus.NO_SENSOR_AVAILABLE
             }
         }
-
-        return if (stepCounter != null || stepDetector != null) {
-            if (_isTracking.value) PhoneStepTrackerStatus.ACTIVE else PhoneStepTrackerStatus.READY
-        } else {
-            PhoneStepTrackerStatus.NO_SENSOR_AVAILABLE
-        }
+        _status.value = calculated
+        return calculated
     }
 
     fun startTracking(): Boolean {

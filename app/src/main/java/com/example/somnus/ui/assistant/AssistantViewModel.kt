@@ -3,6 +3,8 @@ package com.example.somnus.ui.assistant
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.somnus.data.preferences.UserPreferences
+import com.example.somnus.data.preferences.UserPreferencesRepository
 import com.example.somnus.data.repository.AssistantRepository
 import com.example.somnus.domain.assistant.AssistantDiagnostics
 import com.example.somnus.domain.assistant.AssistantMessage
@@ -11,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -22,6 +25,7 @@ data class AssistantUiState(
     val showClearDialog: Boolean = false,
     val showDiagnosticsSheet: Boolean = false,
     val errorMessage: String? = null,
+    val isCloudAiActive: Boolean = false,
     val suggestedPrompts: List<String> = listOf(
         "How did I sleep last night?",
         "How many steps today?",
@@ -37,7 +41,8 @@ data class AssistantUiState(
  * cancellation, and developer diagnostics for the Somnus AI Assistant.
  */
 class AssistantViewModel(
-    private val assistantRepository: AssistantRepository
+    private val assistantRepository: AssistantRepository,
+    private val preferencesRepository: UserPreferencesRepository? = null
 ) : ViewModel() {
 
     private val _inputText = MutableStateFlow("")
@@ -69,8 +74,14 @@ class AssistantViewModel(
     val uiState: StateFlow<AssistantUiState> = combine(
         assistantRepository.conversationMessages,
         assistantRepository.diagnosticsFlow,
+        assistantRepository.isCloudInferenceActive,
+        preferencesRepository?.userPreferencesFlow ?: flowOf(UserPreferences()),
         _localUiState
-    ) { messages, diagnostics, local ->
+    ) { messages, diagnostics, isCloudActive, prefs, local ->
+        val cloudAiActive = isCloudActive &&
+            prefs.groqApiKey.isNotBlank() &&
+            prefs.groqPrivacyConsentGranted
+
         AssistantUiState(
             messages = messages,
             inputText = local.input,
@@ -78,7 +89,8 @@ class AssistantViewModel(
             diagnostics = diagnostics,
             showClearDialog = local.showClear,
             showDiagnosticsSheet = local.showDiag,
-            errorMessage = local.error
+            errorMessage = local.error,
+            isCloudAiActive = cloudAiActive
         )
     }.stateIn(
         scope = viewModelScope,
@@ -147,11 +159,14 @@ class AssistantViewModel(
     }
 
     companion object {
-        fun provideFactory(assistantRepository: AssistantRepository): ViewModelProvider.Factory =
+        fun provideFactory(
+            assistantRepository: AssistantRepository,
+            preferencesRepository: UserPreferencesRepository? = null
+        ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return AssistantViewModel(assistantRepository) as T
+                    return AssistantViewModel(assistantRepository, preferencesRepository) as T
                 }
             }
     }

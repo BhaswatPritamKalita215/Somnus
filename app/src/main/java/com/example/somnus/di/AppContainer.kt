@@ -166,7 +166,11 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     val assistantModelProvider: com.example.somnus.domain.assistant.AssistantModelProvider by lazy {
-        com.example.somnus.domain.assistant.AndroidAiCoreAssistantModelProvider(context)
+        com.example.somnus.domain.assistant.GroqModelProvider(
+            userPreferencesRepository = userPreferencesRepository,
+            localFallback = com.example.somnus.domain.assistant.DeterministicLocalAssistantModelProvider(),
+            isOnlineProvider = { com.example.somnus.domain.assistant.isDeviceOnline(context) }
+        )
     }
 
     override val assistantRepository: com.example.somnus.data.repository.AssistantRepository by lazy {

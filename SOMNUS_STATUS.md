@@ -1,9 +1,9 @@
-# Somnus Project Status — Milestones 9–13 (AI Assistant, Hardening, Health Connect, Foreground Sensor Tracking, & Device Reliability)
+# Somnus Project Status — Milestones 9–14 (AI Assistant, Hardening, Health Connect, Foreground Sensor Tracking, Groq Integration, & Device Reliability)
 
 **Branch**: `main`  
-**Date**: October 21, 2026  
+**Date**: October 22, 2026  
 **Build Status**: ✅ `BUILD SUCCESSFUL` (`testDebugUnitTest`, `assembleDebug`, `assembleRelease`)  
-**Test Status**: ✅ 283 unit tests passed, 0 failures, 0 errors, 0 skipped across 48 test suites  
+**Test Status**: ✅ 296 unit tests passed, 0 failures, 0 errors, 0 skipped across 50 test suites  
 
 ---
 
@@ -373,3 +373,98 @@ Following real-device smoke testing of Somnus (Milestones 9–13), 7 user-report
 1. **Physical Sensor Sleep Session Smoke Test (Issue 1)**: Must be executed on physical hardware: start tracking, wait $\ge$ 5 minutes, stop, save, verify duration in History. Verify force-kill recovery UI explanation.
 2. **Physical Health Connect Sync Smoke Test (Issue 2)**: Must be executed on physical hardware with Health Connect APK installed: launch permission contract, grant permissions, verify sync population; verify permission-denied state when denied.
 3. **Physical Hardware Step Counter Smoke Test (Issue 4)**: Must be executed on physical hardware featuring `Sensor.TYPE_STEP_COUNTER`: request/grant `ACTIVITY_RECOGNITION`, take steps, verify count increment; verify explicit message if hardware sensor is absent.
+
+---
+
+## 9. Release Build
+
+* **Release APK Produced**: `app/build/outputs/apk/release/app-release.apk`
+* **APK Size**: 24,259,978 bytes (~23.14 MB)
+* **Version Metadata**: `versionCode = 1`, `versionName = "0.1.0"` (consistently feeding `BuildConfig.VERSION_NAME` and `OpenFoodFactsClient` User-Agent: `SomnusAndroid/0.1.0 (...)`)
+* **Mandatory Release Signing Policy**:
+  * Silent fallback to debug signing has been completely removed.
+  * `assembleRelease` fails loudly with a descriptive `GradleException` if release credentials are missing, detailing the required environment variables, Gradle properties, `keystore.properties`, and `keytool` generation instructions.
+  * Credentials are read dynamically from uncommitted local configuration (`keystore.properties` / `gradle.properties` / environment variables); 0 passwords or keystores are committed to version control.
+* **Opt-In Local Testing Override**:
+  * For local physical device testing without creating a release keystore, developers can explicitly pass `-Psomnus.allowDebugSignedRelease=true`.
+  * When active, Gradle emits a loud warning naming the resulting APK and sets `BuildConfig.IS_DEBUG_SIGNED_RELEASE = true` (default `false`).
+  * In `HomeScreen`, TopAppBar displays a prominent `"TEST BUILD — debug signed"` warning chip when `BuildConfig.IS_DEBUG_SIGNED_RELEASE` is `true`, preventing accidental distribution.
+  * Comprehensive documentation added in `docs/SIGNING.md`.
+* **Build Hardening & Shrinking**:
+  * `isMinifyEnabled = true` and `isShrinkResources = true` verified.
+  * `BuildConfig.DEBUG` evaluated to `false`; `SyntheticPsqiFixtures` and `SyntheticRunnerCard` dead-code pruned and confirmed excluded from release DEX (recorded in `usage.txt`).
+  * `android:allowBackup="false"` with XML data extraction / backup exclusion rules verified active in merged release manifest.
+  * Unused Health Connect permissions (`READ_NUTRITION`, `WRITE_NUTRITION`) confirmed absent from merged release manifest.
+* **Pre-Release Gate**: Hardware validation of issues 1 (sensor sleep tracking), 2 (Health Connect sync), and 4 (step counter sensor) remains **PENDING** as a mandatory physical device pre-release testing gate.
+* **Distribution Constraint**: **No Play Store upload performed.** The signed release APK is preserved locally for manual physical device testing.
+
+---
+
+## 10. Milestone 14 — Physical Device Smoke Test Defect Resolutions & Groq Cloud AI Integration
+
+**Branch**: `main`  
+**Date**: October 22, 2026  
+**Build Status**: ✅ `BUILD SUCCESSFUL` (`clean testDebugUnitTest assembleDebug --rerun-tasks`)  
+**Test Status**: ✅ 296 unit tests passed, 0 failures, 0 errors, 0 skipped across 50 test suites  
+**Artifacts Produced**:
+- Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
+- Release APK (Signed): `app/build/outputs/apk/release/app-release.apk` (24,259,978 bytes)
+
+### 10.1 Physical Device Smoke Test Defect Resolutions & Feature Addition
+
+| # | Reported Issue | Root Cause | Resolution | Hardware Verification Status |
+|---|---|---|---|---|
+| 1 | Camera permission not requested when tapping barcode scan; preview never starts | Missing permission request contract in `NutritionScreen` and `BarcodeScannerView` prior to CameraX initialization. | Added `rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission())` in `NutritionScreen` and `BarcodeScannerView`. Prompted before CameraX initialization; surfaced rationale dialog with direct "Open App Settings" navigation if denied. Declared `<uses-permission android:name="android.permission.CAMERA" />` and non-required camera features in manifest. | ✅ Automated & Verified (CameraX deferred until permission granted, rationale & settings dialog wired). Ready for physical camera scan. |
+| 2 | Sleep tracking immediately fails with "Tracking Interrupted" (0m duration) | Wake lock was acquired with fixed duration timeout and `isStartingTracking` transition caused transient race condition where active session in Room was detected before foreground service started running. | Removed wake lock timeout; `PowerManager.PARTIAL_WAKE_LOCK` is acquired with `acquire()` without a timeout and set to `setReferenceCounted(false)`. Safely released only when service stops or destroys. Added `isStartingTracking` guard in `HomeViewModel` preventing false "Tracking Interrupted" state during service startup. Verified `android:foregroundServiceType="health"` and `START_STICKY` in manifest and `SleepTrackingService`. | ✅ Automated & Verified (`SleepTrackingServiceTest` and `HomeViewModelTest` passing). Safe wake lock release verified on stop/destroy. |
+| 3 | Health Connect "Sync Now" throws `SecurityException: Caller requires android.permission.health.READ_STEPS` | Intent filter `<action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />` / `<category android:name="android.intent.category.HEALTH_PERMISSIONS" />` was absent from `MainActivity`. Health Connect sync contract requested sleep permissions without explicitly including `HealthPermission.getReadPermission(StepsRecord::class)`. | Added `VIEW_PERMISSION_USAGE` and `HEALTH_PERMISSIONS` intent filter to `MainActivity`. Updated `REQUIRED_PERMISSIONS` in `HealthConnectClientWrapper` to include `HealthPermission.getReadPermission(StepsRecord::class)`. Updated `HomeScreen` and `ActivityScreen` permission launchers to explicitly request both sleep and step permissions before sync. | ✅ Automated & Verified (`HealthConnectManagerTest`, `ActivityViewModelTest`, `HomeViewModelTest`). Prevents `SecurityException`. |
+| 4 | Tapping "Grant Permission" for `ACTIVITY_RECOGNITION` does not trigger OS permission dialog | Button logic was not launching the `ActivityResultContracts.RequestPermission()` contract for `Manifest.permission.ACTIVITY_RECOGNITION` directly. | Replaced button logic in `ActivityScreen` with direct launcher for `Manifest.permission.ACTIVITY_RECOGNITION`. Updated `PhoneStepTracker.checkStatus()` to update internal `_status` StateFlow immediately upon evaluation so UI updates without requiring manual refresh. | ✅ Automated & Verified (`ActivityViewModelTest.onActivityPermissionResult_requeriesStatus` passing). |
+| 5 | Integrate Groq API for AI Assistant with dynamic model selection and token fallback | Need high-speed cloud neural inference with automatic model selection and rate-limit/token-limit fallback without breaking privacy guarantees or local offline fallback. | Implemented `GroqModelProvider` implementing `AssistantModelProvider`: dynamically queries `GET https://api.groq.com/openai/v1/models`, filters chat models, ranks by largest context window, and executes chat completions with fallback cascade on HTTP 429 or token limit errors. Added DataStore preference for `groqApiKey` with no hardcoded keys. Added Groq configuration card in `SettingsScreen` with "Test Connection" button and status feedback. Defaults to deterministic local engine when key is blank or network is unavailable. | ✅ Automated & Verified (6 unit tests in `GroqModelProviderTest` and `SettingsViewModelTest` passing). |
+
+### 10.2 Verification Summary
+
+- **Total Test Suites**: 50
+- **Total Unit Tests Executed**: 296
+- **Failures / Errors / Skipped**: 0 / 0 / 0
+- **Pass Rate**: 100%
+- **Build Outcome**: ✅ `BUILD SUCCESSFUL` across `clean testDebugUnitTest assembleDebug assembleRelease`
+
+---
+
+## 11. Milestone 15 — Groq Cloud AI Privacy Consent Gate & Assistant UI Indicator
+
+**Branch**: `main`  
+**Date**: October 22, 2026  
+**Build Status**: ✅ `BUILD SUCCESSFUL` (`clean testDebugUnitTest assembleDebug --rerun-tasks`)  
+**Test Status**: ✅ 301 unit tests passed, 0 failures, 0 errors, 0 skipped across 50 test suites  
+**Artifacts Produced**:
+- Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
+
+### 11.1 Key Enhancements & Privacy Guarantees
+
+1. **Explicit DataStore Privacy Consent Preference**:
+   - Added `groq_privacy_consent_granted` Boolean preference key in `UserPreferencesRepository`.
+   - Exposed `groqPrivacyConsentGranted: Boolean = false` on `UserPreferences` and `setGroqPrivacyConsentGranted(granted: Boolean)`.
+2. **SettingsScreen Consent Dialog Gate**:
+   - Gated "Save Key" and "Test Connection" in `SettingsScreen.kt` behind `groq_privacy_consent_granted`.
+   - If false, displays `AlertDialog`:
+     - **Title**: `"Enable Cloud AI?"`
+     - **Body**: `"By adding a Groq API key, you allow Somnus to send your health summaries and questions to Groq's servers for processing. Somnus normally keeps all data on your device. Do not proceed if you do not want your data leaving this device."`
+     - **Confirm Button**: `"I Understand, Enable Groq"` (grants consent in DataStore and executes pending save or test action).
+     - **Dismiss Button**: `"Cancel"` (clears API key input and aborts pending action).
+3. **GroqModelProvider Cloud-Blocking & Safe Fallback**:
+   - `GroqModelProvider` constructor checks `prefs.groqPrivacyConsentGranted`; if false, `apiKeyProvider` evaluates to `null`, completely blocking all remote transmissions.
+   - On network errors, 401 Unauthorized, or offline state (`isDeviceOnline == false`), safely falls back to `DeterministicLocalAssistantModelProvider` without crashing and without logging the API key.
+4. **AssistantScreen TopAppBar Model Provider Indicator**:
+   - `AssistantUiState` exposes `isCloudAiActive: Boolean` combining `isCloudInferenceActive`, `groqApiKey.isNotBlank()`, and `groqPrivacyConsentGranted`.
+   - In `AssistantScreen.kt` TopAppBar:
+     - When Cloud AI is active: Displays `"Cloud AI Active"` badge with `Icons.Default.Cloud` and `"Somnus AI Assistant"` title.
+     - When Local / Offline / Falling back: Displays `"Local Engine Active"` badge with `Icons.Default.Psychology` and `"Local rules assistant"` title.
+
+### 11.2 Verification Summary
+
+- **Total Test Suites**: 50
+- **Total Unit Tests Executed**: 301
+- **Failures / Errors / Skipped**: 0 / 0 / 0
+- **Pass Rate**: 100%
+- **Build Outcome**: ✅ `BUILD SUCCESSFUL` across `clean testDebugUnitTest assembleDebug --rerun-tasks`
+

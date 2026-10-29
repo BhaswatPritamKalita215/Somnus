@@ -136,6 +136,13 @@ class ActivityViewModel(
         }
     }
 
+    fun onActivityPermissionResult(isGranted: Boolean) {
+        val status = phoneStepTracker.checkStatus()
+        if (isGranted && status == PhoneStepTrackerStatus.READY && !phoneStepTracker.isTracking.value) {
+            phoneStepTracker.startTracking()
+        }
+    }
+
     fun togglePhoneTracking(enable: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setPhoneStepTrackingEnabled(enable)

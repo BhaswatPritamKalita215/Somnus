@@ -36,7 +36,8 @@ class DefaultHealthConnectClientWrapper(
 
     companion object {
         val REQUIRED_PERMISSIONS = setOf(
-            HealthPermission.getReadPermission(SleepSessionRecord::class)
+            HealthPermission.getReadPermission(SleepSessionRecord::class),
+            HealthPermission.getReadPermission(StepsRecord::class)
         )
         val STEP_PERMISSIONS = setOf(
             HealthPermission.getReadPermission(StepsRecord::class)

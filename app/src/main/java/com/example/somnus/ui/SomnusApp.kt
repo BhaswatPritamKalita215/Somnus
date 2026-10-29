@@ -243,7 +243,8 @@ fun SomnusApp() {
                     is Screen.Assistant -> {
                         val assistantViewModel: AssistantViewModel = viewModel(
                             factory = AssistantViewModel.provideFactory(
-                                assistantRepository = container.assistantRepository
+                                assistantRepository = container.assistantRepository,
+                                preferencesRepository = container.userPreferencesRepository
                             )
                         )
                         AssistantScreen(

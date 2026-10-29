@@ -27,11 +27,26 @@ import org.junit.Rule
 import org.junit.Test
 import java.time.Instant
 
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.somnus.data.preferences.UserPreferencesRepository
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [34])
 class AssistantViewModelTest {
 
     @get:Rule
     val instantTaskExecutorRule = InstantTaskExecutorRule()
+
+    @get:Rule
+    val tmpFolder: TemporaryFolder = TemporaryFolder()
 
     private val testDispatcher = StandardTestDispatcher()
     private val testScope = TestScope(testDispatcher)
@@ -115,6 +130,46 @@ class AssistantViewModelTest {
         advanceUntilIdle()
         assertFalse(viewModel.uiState.value.showDiagnosticsSheet)
     }
+
+    @Test
+    fun uiState_cloudAiActive_falseByDefault() = runTest(testDispatcher) {
+        assertFalse(viewModel.uiState.value.isCloudAiActive)
+    }
+
+    @Test
+    fun uiState_cloudAiActive_trueOnlyWhenKeySetConsentGrantedAndCloudActive() = runTest(testDispatcher) {
+        val testFile = tmpFolder.newFile("test_prefs.preferences_pb")
+        val testDataStore = PreferenceDataStoreFactory.create(
+            scope = backgroundScope,
+            produceFile = { testFile }
+        )
+        val prefsRepo = UserPreferencesRepository(testDataStore)
+
+        fakeRepository.cloudActiveFlow.value = true
+        val customVm = AssistantViewModel(fakeRepository, prefsRepo)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            customVm.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        // Initially without key/consent -> false
+        assertFalse(customVm.uiState.value.isCloudAiActive)
+
+        // Set key only, without consent -> false
+        prefsRepo.setGroqApiKey("gsk_valid_key")
+        advanceUntilIdle()
+        assertFalse(customVm.uiState.value.isCloudAiActive)
+
+        // Grant consent -> true!
+        prefsRepo.setGroqPrivacyConsentGranted(true)
+        advanceUntilIdle()
+        assertTrue(customVm.uiState.value.isCloudAiActive)
+
+        // If cloud becomes inactive (e.g. offline/error) -> false
+        fakeRepository.cloudActiveFlow.value = false
+        advanceUntilIdle()
+        assertFalse(customVm.uiState.value.isCloudAiActive)
+    }
 }
 
 class FakeAssistantRepository : AssistantRepository {
@@ -123,6 +178,9 @@ class FakeAssistantRepository : AssistantRepository {
 
     private val _diagnostics = MutableStateFlow(AssistantDiagnostics())
     override val diagnosticsFlow: Flow<AssistantDiagnostics> = _diagnostics.asStateFlow()
+
+    val cloudActiveFlow = MutableStateFlow(false)
+    override val isCloudInferenceActive: Flow<Boolean> = cloudActiveFlow.asStateFlow()
 
     override suspend fun processQuery(userText: String): Flow<AssistantMessage> = flow {
         val userMsg = AssistantMessage(

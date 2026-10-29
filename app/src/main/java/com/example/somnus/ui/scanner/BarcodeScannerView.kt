@@ -356,11 +356,28 @@ private fun CameraPermissionCard(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            val context = LocalContext.current
+
             Button(
                 onClick = onRequestPermission,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Grant Camera Permission")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            androidx.compose.material3.FilledTonalButton(
+                onClick = {
+                    val intent = android.content.Intent(
+                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.fromParts("package", context.packageName, null)
+                    )
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Open App Settings")
             }
 
             Spacer(modifier = Modifier.height(8.dp))

@@ -16,11 +16,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -33,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.somnus.domain.model.MealType
@@ -53,6 +57,20 @@ fun NutritionScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showGoalDialog by remember { mutableStateOf(false) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var showCameraPermissionRationale by remember { mutableStateOf(false) }
+
+    val cameraPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            showCameraPermissionRationale = false
+            viewModel.startScanning()
+        } else {
+            showCameraPermissionRationale = true
+        }
+    }
 
     // Surface feedback messages in snackbar
     LaunchedEffect(uiState.feedbackMessage) {
@@ -92,7 +110,18 @@ fun NutritionScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { viewModel.startScanning() },
+                onClick = {
+                    val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.CAMERA
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                    if (hasPermission) {
+                        viewModel.startScanning()
+                    } else {
+                        cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                    }
+                },
                 icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) },
                 text = { Text("Scan Food") },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -297,6 +326,58 @@ fun NutritionScreen(
                         showGoalDialog = false
                     },
                     onDismiss = { showGoalDialog = false }
+                )
+            }
+
+            // Camera Permission Rationale & Settings Dialog
+            if (showCameraPermissionRationale) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showCameraPermissionRationale = false },
+                    title = {
+                        Text(
+                            text = "Camera Permission Required",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Somnus scans food barcodes directly on your phone using Google ML Kit. Camera frames are processed purely on-device and are never saved or sent over the internet.\n\nPlease grant camera access or open App Settings to enable barcode scanning.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val intent = android.content.Intent(
+                                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    android.net.Uri.fromParts("package", context.packageName, null)
+                                )
+                                context.startActivity(intent)
+                                showCameraPermissionRationale = false
+                            }
+                        ) {
+                            Text("Open App Settings")
+                        }
+                    },
+                    dismissButton = {
+                        Row {
+                            OutlinedButton(
+                                onClick = {
+                                    showCameraPermissionRationale = false
+                                    viewModel.openManualEntry()
+                                }
+                            ) {
+                                Text("Enter Manually")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            androidx.compose.material3.TextButton(
+                                onClick = { showCameraPermissionRationale = false }
+                            ) {
+                                Text("Cancel")
+                            }
+                        }
+                    }
                 )
             }
         }

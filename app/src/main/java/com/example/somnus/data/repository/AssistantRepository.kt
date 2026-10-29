@@ -27,6 +27,11 @@ interface AssistantRepository {
     val diagnosticsFlow: Flow<AssistantDiagnostics>
 
     /**
+     * Observes whether cloud inference is currently active and reachable.
+     */
+    val isCloudInferenceActive: Flow<Boolean> get() = kotlinx.coroutines.flow.flowOf(false)
+
+    /**
      * Submits a user inquiry, runs deterministic routing, safety checks, optional compact context synthesis,
      * and streams the progressive response chunks.
      */
